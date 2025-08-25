@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{{ release }} - 压缩包文件{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+        <li class="breadcrumb-item active">{{ release }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h4 class="mb-0">
+                    <i class="bi bi-file-earmark-zip me-2"></i>
+                    压缩包文件提醒
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-4">
+                    <i class="bi bi-file-earmark-zip display-1 text-warning"></i>
+                </div>
+                
+                <h5 class="text-center mb-3">{{ release }}</h5>
+                
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle me-2"></i>文件信息</h6>
+                    <ul class="mb-0">
+                        <li><strong>文件名：</strong>{{ zip_info.name }}</li>
+                        <li><strong>文件大小：</strong>{{ zip_info.size_human }}</li>
+                        <li><strong>文件类型：</strong>ZIP 压缩包</li>
+                    </ul>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <h6><i class="bi bi-exclamation-triangle me-2"></i>重要提醒</h6>
+                    <p class="mb-0">
+                        该 Product Manual 是压缩包格式，暂时无法在线浏览。
+                        <br>
+                        <strong>请联系管理员进行解压缩处理。</strong>
+                    </p>
+                </div>
+                
+                <div class="text-center">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary me-2">
+                        <i class="bi bi-arrow-left"></i> 返回首页
+                    </a>
+                    <a href="{{ zip_info.path }}" class="btn btn-outline-secondary" download>
+                        <i class="bi bi-download"></i> 下载压缩包
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-question-circle me-2"></i>
+                        需要帮助？
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">如果您需要访问此Product Manual的内容，请：</p>
+                    <ol class="mb-0">
+                        <li>联系系统管理员</li>
+                        <li>提供Release名称：<code>{{ release }}</code></li>
+                        <li>等待管理员解压缩处理</li>
+                        <li>解压完成后，即可正常浏览文档</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

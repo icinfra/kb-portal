@@ -95,6 +95,19 @@
                 height: 600px;
             }
         }
+        
+        /* 固定底部栏样式 */
+        body {
+            padding-bottom: 70px; /* 为固定底部栏留出空间 */
+        }
+        
+        .fixed-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1030; /* 确保在其他内容之上 */
+        }
     </style>
 </head>
 <body>
@@ -102,7 +115,7 @@
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="bi bi-file-earmark-pdf"></i>
-                资料门户
+                ICINFRA EDA资料门户
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -161,7 +174,7 @@
         </div>
     </main>
 
-    <footer class="bg-dark text-light text-center py-3 mt-5">
+    <footer class="bg-dark text-light text-center py-3 mt-5 fixed-footer">
         <div class="container">
             <p>&copy; 2025 产品手册文档查看器. 版权所有.</p>
         </div>

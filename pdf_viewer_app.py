@@ -18,11 +18,12 @@ class PDFDocumentManager:
     def __init__(self, base_path):
         self.base_path = Path(base_path)
         self.releases = {}
+        self.release_zips = {}  # 存储zip文件信息
         self.all_pdfs = []  # 用于搜索索引
         self.scan_documents()
     
     def scan_documents(self):
-        """扫描所有PDF文件并按release组织"""
+        """扫描所有PDF文件和ZIP文件并按release组织"""
         print(f"开始扫描目录: {self.base_path}")
         
         # 扫描所有PDF文件
@@ -32,7 +33,30 @@ class PDFDocumentManager:
         for pdf_file in pdf_files:
             self.add_document(pdf_file)
         
+        # 扫描release级别的ZIP文件
+        self.scan_release_zips()
+        
         print(f"文档结构构建完成，共 {len(self.releases)} 个Release")
+        print(f"找到 {len(self.release_zips)} 个Release ZIP文件")
+    
+    def scan_release_zips(self):
+        """扫描与release同级的ZIP文件"""
+        zip_files = list(self.base_path.glob("*.zip"))
+        
+        for zip_file in zip_files:
+            zip_name = zip_file.stem  # 不包含扩展名的文件名
+            
+            # 检查是否存在同名的release目录
+            release_dir = self.base_path / zip_name
+            if not release_dir.exists() or not release_dir.is_dir():
+                # 如果没有同名目录，则添加这个ZIP文件
+                self.release_zips[zip_name] = {
+                    'name': zip_file.name,
+                    'path': str(zip_file),
+                    'size': zip_file.stat().st_size,
+                    'size_human': self.format_size(zip_file.stat().st_size),
+                    'is_zip': True
+                }
     
     def add_document(self, pdf_path):
         """添加文档到release结构中"""
@@ -84,8 +108,33 @@ class PDFDocumentManager:
             return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
     
     def get_releases(self):
-        """获取所有release列表"""
+        """获取所有release列表，包括zip文件"""
         return sorted(self.releases.keys())
+    
+    def get_all_releases_with_zips(self):
+        """获取所有release和zip文件的统一列表"""
+        all_releases = []
+        
+        # 添加正常的release目录
+        for release_name in sorted(self.releases.keys()):
+            all_releases.append({
+                'name': release_name,
+                'type': 'directory',
+                'is_zip': False,
+                'doc_count': len(self.releases[release_name])
+            })
+        
+        # 添加独立的zip文件
+        for zip_name, zip_info in sorted(self.release_zips.items()):
+            all_releases.append({
+                'name': zip_name,
+                'type': 'zip',
+                'is_zip': True,
+                'size_human': zip_info['size_human'],
+                'zip_path': zip_info['path']
+            })
+        
+        return all_releases
     
     def get_release_documents(self, release):
         """获取指定release的所有文档"""
@@ -128,9 +177,12 @@ doc_manager = None
 
 @app.route('/')
 def index():
-    """主页 - 显示所有releases"""
-    releases = doc_manager.get_releases()
+    """主页 - 显示所有releases和zip文件"""
+    releases = doc_manager.get_all_releases_with_zips()
     stats = doc_manager.get_stats()
+    stats['total_releases_with_zips'] = len(releases)
+    stats['total_zip_files'] = len(doc_manager.release_zips)
+    
     return render_template('index.html', releases=releases, stats=stats)
 
 @app.route('/api/releases')
@@ -151,12 +203,36 @@ def api_search():
     if len(query.strip()) < 2:
         return jsonify([])
     
-    results = doc_manager.search_documents(query)
+    documents = doc_manager.search_documents(query)
+    
+    # 转换为前端期望的格式
+    results = []
+    for doc in documents:
+        result = {
+            'doc': {
+                'name': doc['name'],
+                'relative_path': doc['relative_path'],
+                'size_human': doc['size_human']
+            },
+            'product': doc['release'],  # 使用release作为product
+            'version': doc['release'],  # 使用release作为version
+            'module': doc['relative_in_release']  # 使用相对路径作为module
+        }
+        results.append(result)
+    
     return jsonify(results)
 
 @app.route('/release/<release>')
 def view_release(release):
     """查看release页面"""
+    # 首先检查是否是zip文件
+    if release in doc_manager.release_zips:
+        zip_info = doc_manager.release_zips[release]
+        return render_template('zip_notice.html', 
+                             release=release, 
+                             zip_info=zip_info)
+    
+    # 正常的release目录
     documents = doc_manager.get_release_documents(release)
     if not documents:
         return "Release不存在", 404

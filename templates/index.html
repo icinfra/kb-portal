@@ -3,23 +3,27 @@
 {% block title %}Knowledge Base Portal{% endblock %}
 
 {% block content %}
+<!-- 统计信息 -->
 <div class="row mb-4">
-    <!-- 统计信息卡片 -->
-    <div class="col-12">
-        <div class="card bg-primary text-white mb-4">
+    <div class="col-md-12">
+        <div class="card stats-card">
             <div class="card-body">
                 <div class="row text-center">
-                    <div class="col-md-4">
-                        <h3><i class="bi bi-folder2"></i> {{ stats.total_releases }}</h3>
-                        <p class="mb-0">Total Releases</p>
+                    <div class="col-md-3">
+                        <h3><i class="bi bi-folder"></i> {{ stats.total_releases }}</h3>
+                        <p>Release Folders</p>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <h3><i class="bi bi-file-earmark-zip"></i> {{ stats.total_zip_files }}</h3>
+                        <p>ZIP Files</p>
+                    </div>
+                    <div class="col-md-3">
                         <h3><i class="bi bi-file-earmark-pdf"></i> {{ stats.total_pdfs }}</h3>
-                        <p class="mb-0">PDF Documents</p>
+                        <p>PDF Documents</p>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <h3><i class="bi bi-hdd"></i> {{ (stats.total_size / (1024*1024*1024))|round(2) }} GB</h3>
-                        <p class="mb-0">Total Size</p>
+                        <p>Total Size</p>
                     </div>
                 </div>
             </div>
@@ -31,13 +35,39 @@
 <div class="row">
     {% for release in releases %}
     <div class="col-lg-4 col-md-6 mb-4">
-        <div class="card h-100 release-card" onclick="window.location.href='{{ url_for('view_release', release=release) }}';">
+        {% if release.is_zip %}
+        <!-- ZIP文件卡片 -->
+        <div class="card h-100 release-card zip-card" onclick="location.href='/release/{{ release.name }}';">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-file-earmark-zip text-warning me-2"></i>
+                    {{ release.name }}
+                    <span class="badge bg-warning text-dark ms-2">ZIP</span>
+                </h5>
+                <p class="card-text text-muted">
+                    压缩包文件 ({{ release.size_human }})
+                    <br>
+                    <small class="text-warning">需要解压缩才能浏览</small>
+                </p>
+            </div>
+            <div class="card-footer bg-warning bg-opacity-10">
+                <small class="text-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 点击查看详情
+                </small>
+            </div>
+        </div>
+        {% else %}
+        <!-- 正常目录卡片 -->
+        <div class="card h-100 release-card" onclick="location.href='/release/{{ release.name }}';">
             <div class="card-body">
                 <h5 class="card-title">
                     <i class="bi bi-folder text-primary me-2"></i>
-                    {{ release }}
+                    {{ release.name }}
+                    <span class="badge bg-primary ms-2">{{ release.doc_count }}</span>
                 </h5>
                 <p class="card-text text-muted">
+                    包含 {{ release.doc_count }} 个文档
+                    <br>
                     点击查看此版本的所有文档
                 </p>
             </div>
@@ -47,20 +77,33 @@
                 </small>
             </div>
         </div>
+        {% endif %}
     </div>
     {% endfor %}
 </div>
+{% endblock %}
 
+{% block scripts %}
 <style>
-.release-card {
-    transition: all 0.3s ease;
-    cursor: pointer;
-    border: none;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.release-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-}
+    .release-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .release-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    .zip-card {
+        border-left: 4px solid #ffc107;
+    }
+    .zip-card:hover {
+        border-left-color: #e0a800;
+    }
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
 </style>
 {% endblock %}
