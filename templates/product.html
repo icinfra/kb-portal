@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product }} - 产品手册文档查看器{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('browse') }}">浏览</a></li>
+        <li class="breadcrumb-item active">{{ product }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-cpu"></i>
+            {{ product }}
+        </h1>
+        <p class="text-muted">选择一个版本查看该版本的文档</p>
+    </div>
+</div>
+
+<div class="row">
+    {% for version in versions %}
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-body d-flex flex-column">
+                <h5 class="card-title">
+                    <i class="bi bi-tag"></i>
+                    版本 {{ version }}
+                </h5>
+                <p class="card-text text-muted flex-grow-1">
+                    查看 {{ product }} {{ version }} 版本的所有文档模块
+                </p>
+                <div class="mt-auto d-flex gap-2">
+                    <a href="{{ url_for('browse_version', product=product, version=version) }}" 
+                       class="btn btn-primary btn-sm flex-grow-1">
+                        <i class="bi bi-folder-open"></i>
+                        查看模块
+                    </a>
+                    <button class="btn btn-outline-secondary btn-sm" 
+                            onclick="toggleModules('{{ product }}', '{{ version }}', this)">
+                        <i class="bi bi-list"></i>
+                    </button>
+                </div>
+                <div class="modules-container mt-2" style="display: none;">
+                    <div class="modules-loading text-center">
+                        <small class="text-muted">加载中...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not versions %}
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-warning text-center">
+            <i class="bi bi-exclamation-triangle"></i>
+            该产品暂无可用版本。
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleModules(product, version, button) {
+    const card = button.closest('.card');
+    const container = card.querySelector('.modules-container');
+    
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        button.innerHTML = '<i class="bi bi-x"></i>';
+        
+        if (!container.dataset.loaded) {
+            loadModules(product, version, container);
+        }
+    } else {
+        container.style.display = 'none';
+        button.innerHTML = '<i class="bi bi-list"></i>';
+    }
+}
+
+function loadModules(product, version, container) {
+    fetch(`/api/modules/${encodeURIComponent(product)}/${encodeURIComponent(version)}`)
+        .then(response => response.json())
+        .then(modules => {
+            container.dataset.loaded = 'true';
+            
+            if (modules.length === 0) {
+                container.innerHTML = '<small class="text-muted">暂无模块信息</small>';
+                return;
+            }
+            
+            const modulesList = modules.slice(0, 10).map(module => 
+                `<a href="/browse/${encodeURIComponent(product)}/${encodeURIComponent(version)}/${encodeURIComponent(module)}" 
+                   class="badge bg-info text-decoration-none me-1 mb-1">${module}</a>`
+            ).join('');
+            
+            const moreText = modules.length > 10 ? `<small class="text-muted d-block mt-1">还有 ${modules.length - 10} 个模块...</small>` : '';
+            
+            container.innerHTML = `
+                <div class="mt-2">
+                    <small class="text-muted d-block mb-1">模块预览:</small>
+                    ${modulesList}
+                    ${moreText}
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('加载模块列表失败:', error);
+            container.innerHTML = '<small class="text-danger">加载失败</small>';
+        });
+}
+</script>
+{% endblock %}

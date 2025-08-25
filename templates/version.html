@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product }} {{ version }} - 产品手册文档查看器{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('browse') }}">浏览</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('browse_product', product=product) }}">{{ product }}</a></li>
+        <li class="breadcrumb-item active">{{ version }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-tag"></i>
+            {{ product }} {{ version }}
+        </h1>
+        <p class="text-muted">选择一个文档模块查看该模块的PDF文档</p>
+    </div>
+</div>
+
+<div class="row">
+    {% for module in modules %}
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-body d-flex flex-column">
+                <h5 class="card-title">
+                    <i class="bi bi-folder"></i>
+                    {% if module == '根目录' %}
+                        <span class="text-muted">{{ module }}</span>
+                    {% else %}
+                        {{ module }}
+                    {% endif %}
+                </h5>
+                <p class="card-text text-muted flex-grow-1">
+                    {% if module == '根目录' %}
+                        根目录下的文档
+                    {% else %}
+                        {{ module }} 模块的相关文档
+                    {% endif %}
+                </p>
+                <div class="mt-auto d-flex gap-2">
+                    <a href="{{ url_for('browse_module', product=product, version=version, module=module) }}" 
+                       class="btn btn-primary btn-sm flex-grow-1">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                        查看文档
+                    </a>
+                    <button class="btn btn-outline-secondary btn-sm" 
+                            onclick="toggleDocuments('{{ product }}', '{{ version }}', '{{ module }}', this)">
+                        <i class="bi bi-list"></i>
+                    </button>
+                </div>
+                <div class="documents-container mt-2" style="display: none;">
+                    <div class="documents-loading text-center">
+                        <small class="text-muted">加载中...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if not modules %}
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-warning text-center">
+            <i class="bi bi-exclamation-triangle"></i>
+            该版本暂无可用文档模块。
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleDocuments(product, version, module, button) {
+    const card = button.closest('.card');
+    const container = card.querySelector('.documents-container');
+    
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        button.innerHTML = '<i class="bi bi-x"></i>';
+        
+        if (!container.dataset.loaded) {
+            loadDocuments(product, version, module, container);
+        }
+    } else {
+        container.style.display = 'none';
+        button.innerHTML = '<i class="bi bi-list"></i>';
+    }
+}
+
+function loadDocuments(product, version, module, container) {
+    fetch(`/api/documents/${encodeURIComponent(product)}/${encodeURIComponent(version)}/${encodeURIComponent(module)}`)
+        .then(response => response.json())
+        .then(documents => {
+            container.dataset.loaded = 'true';
+            
+            if (documents.length === 0) {
+                container.innerHTML = '<small class="text-muted">暂无文档</small>';
+                return;
+            }
+            
+            const documentsList = documents.slice(0, 5).map(doc => 
+                `<div class="d-flex justify-content-between align-items-center border-bottom py-1">
+                    <a href="/pdf/${encodeURIComponent(doc.relative_path)}" 
+                       target="_blank" 
+                       class="text-decoration-none text-truncate me-2" 
+                       title="${doc.name}">
+                        <i class="bi bi-file-earmark-pdf text-danger"></i>
+                        ${doc.name.length > 20 ? doc.name.substring(0, 20) + '...' : doc.name}
+                    </a>
+                    <small class="text-muted">${doc.size_human}</small>
+                </div>`
+            ).join('');
+            
+            const moreText = documents.length > 5 ? 
+                `<small class="text-muted d-block mt-1 text-center">还有 ${documents.length - 5} 个文档...</small>` : '';
+            
+            container.innerHTML = `
+                <div class="mt-2">
+                    <small class="text-muted d-block mb-1">文档预览:</small>
+                    ${documentsList}
+                    ${moreText}
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('加载文档列表失败:', error);
+            container.innerHTML = '<small class="text-danger">加载失败</small>';
+        });
+}
+</script>
+{% endblock %}

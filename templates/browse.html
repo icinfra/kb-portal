@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}浏览文档 - 产品手册文档查看器{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+        <li class="breadcrumb-item active">浏览</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-folder-open"></i>
+            浏览文档
+        </h1>
+        <p class="text-muted">选择一个产品查看其所有版本的文档</p>
+    </div>
+</div>
+
+<div class="row" id="productList">
+    <!-- 产品列表将通过JavaScript动态加载 -->
+</div>
+
+<div class="text-center mt-4" id="loading">
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">加载中...</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadProducts();
+});
+
+function loadProducts() {
+    fetch('/api/products')
+        .then(response => response.json())
+        .then(products => {
+            const productList = document.getElementById('productList');
+            const loading = document.getElementById('loading');
+            
+            loading.style.display = 'none';
+            
+            if (products.length === 0) {
+                productList.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-info text-center">
+                            <i class="bi bi-info-circle"></i>
+                            暂无可用的产品文档
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            products.forEach(product => {
+                const productCard = createProductCard(product);
+                productList.appendChild(productCard);
+            });
+        })
+        .catch(error => {
+            console.error('加载产品列表失败:', error);
+            document.getElementById('loading').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    加载失败，请刷新页面重试
+                </div>
+            `;
+        });
+}
+
+function createProductCard(product) {
+    const col = document.createElement('div');
+    col.className = 'col-lg-3 col-md-4 col-sm-6 mb-4';
+    
+    col.innerHTML = `
+        <div class="card h-100">
+            <div class="card-body d-flex flex-column">
+                <h5 class="card-title">
+                    <i class="bi bi-cpu"></i>
+                    ${product}
+                </h5>
+                <p class="card-text text-muted flex-grow-1">
+                    查看 ${product} 产品的所有版本和文档
+                </p>
+                <div class="mt-auto d-flex gap-2">
+                    <a href="/browse/${encodeURIComponent(product)}" 
+                       class="btn btn-primary btn-sm flex-grow-1">
+                        <i class="bi bi-arrow-right-circle"></i>
+                        浏览文档
+                    </a>
+                    <button class="btn btn-outline-secondary btn-sm" 
+                            onclick="toggleVersions('${product}', this)">
+                        <i class="bi bi-list"></i>
+                    </button>
+                </div>
+                <div class="versions-container mt-2" style="display: none;">
+                    <div class="versions-loading text-center">
+                        <small class="text-muted">加载中...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    return col;
+}
+
+function toggleVersions(product, button) {
+    const card = button.closest('.card');
+    const container = card.querySelector('.versions-container');
+    
+    if (container.style.display === 'none') {
+        container.style.display = 'block';
+        button.innerHTML = '<i class="bi bi-x"></i>';
+        
+        if (!container.dataset.loaded) {
+            loadVersions(product, container);
+        }
+    } else {
+        container.style.display = 'none';
+        button.innerHTML = '<i class="bi bi-list"></i>';
+    }
+}
+
+function loadVersions(product, container) {
+    fetch(`/api/versions/${encodeURIComponent(product)}`)
+        .then(response => response.json())
+        .then(versions => {
+            container.dataset.loaded = 'true';
+            
+            if (versions.length === 0) {
+                container.innerHTML = '<small class="text-muted">暂无版本信息</small>';
+                return;
+            }
+            
+            const versionsList = versions.map(version => 
+                `<a href="/browse/${encodeURIComponent(product)}/${encodeURIComponent(version)}" 
+                   class="badge bg-secondary text-decoration-none me-1 mb-1">${version}</a>`
+            ).join('');
+            
+            container.innerHTML = `
+                <div class="mt-2">
+                    <small class="text-muted d-block mb-1">可用版本:</small>
+                    ${versionsList}
+                </div>
+            `;
+        })
+        .catch(error => {
+            console.error('加载版本列表失败:', error);
+            container.innerHTML = '<small class="text-danger">加载失败</small>';
+        });
+}
+</script>
+{% endblock %}
