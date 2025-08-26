@@ -51,9 +51,37 @@ def main():
     print("按 Ctrl+C 停止服务")
     print("=" * 60)
 
+    # 自定义RequestHandler来增强Werkzeug日志格式
+    import logging
+    from werkzeug.serving import WSGIRequestHandler
+    from flask import g
+    
+    # 禁用werkzeug logger，我们用自定义的
+    logging.getLogger('werkzeug').disabled = True
+    
+    class CustomRequestHandler(WSGIRequestHandler):
+        def log_request(self, code='-', size='-'):
+            """自定义日志格式，包含用户信息"""
+            try:
+                # 尝试获取用户信息
+                user = getattr(g, 'user', 'unknown')
+            except RuntimeError:
+                # 如果在应用上下文之外，使用默认值
+                user = 'unknown'
+            
+            # 自定义日志格式：包含用户信息
+            self.log('info', '%s - %s [%s] "%s" %s %s',
+                     self.address_string(),
+                     user,  # 添加用户信息
+                     self.log_date_time_string(),
+                     self.requestline,
+                     str(code),
+                     str(size))
+
     try:
-        # 启动Flask应用
-        app.run(debug=False, host='0.0.0.0', port=5000)
+        # 启动Flask应用，使用自定义RequestHandler
+        app.run(debug=False, host='0.0.0.0', port=5000, threaded=True, 
+                use_reloader=False, request_handler=CustomRequestHandler)
     except KeyboardInterrupt:
         print("\n服务已停止")
     except Exception as e:

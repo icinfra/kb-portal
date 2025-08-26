@@ -130,6 +130,12 @@
                     </div>
                     <div id="searchResults" class="search-results"></div>
                 </div>
+                <div class="navbar-nav">
+                    <span class="navbar-text text-light">
+                        <i class="bi bi-person-circle me-1"></i>
+                        用户: {{ current_user }}
+                    </span>
+                </div>
             </div>
         </div>
     </nav>
@@ -176,7 +182,19 @@
 
     <footer class="bg-dark text-light text-center py-3 mt-5 fixed-footer">
         <div class="container">
-            <p>&copy; 2025 产品手册文档查看器. 版权所有.</p>
+            <div class="row">
+                <div class="col-md-6 text-start">
+                    <small>
+                        <i class="bi bi-person-fill me-1"></i>当前用户: {{ current_user }}
+                    </small>
+                </div>
+                <div class="col-md-6 text-end">
+                    <small>
+                        <i class="bi bi-clock me-1"></i>访问时间: {{ request_time.strftime('%Y-%m-%d %H:%M:%S') if request_time else '' }}
+                    </small>
+                </div>
+            </div>
+            <p class="mb-0 mt-2">&copy; 2025 产品手册文档查看器. 版权所有.</p>
         </div>
     </footer>
 
@@ -197,7 +215,14 @@
             }
             
             searchTimeout = setTimeout(() => {
-                fetch(`/api/search?q=${encodeURIComponent(query)}`)
+                fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User': '{{ current_user }}',
+                        'X-Request-Time': '{{ request_time.isoformat() if request_time else "" }}'
+                    }
+                })
                     .then(response => response.json())
                     .then(data => {
                         showSearchResults(data);

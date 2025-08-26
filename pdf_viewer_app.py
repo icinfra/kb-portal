@@ -8,11 +8,43 @@ PDF 文档查看器 Flask 应用
 import os
 import re
 from pathlib import Path
-from flask import Flask, render_template, send_file, jsonify, request, url_for
-from collections import defaultdict
-import mimetypes
+from flask import Flask, render_template, send_file, jsonify, request, url_for, g
+import datetime
 
 app = Flask(__name__)
+
+# 获取当前用户信息
+CURRENT_USER = os.environ.get('USER', os.environ.get('USERNAME', 'unknown'))
+
+@app.before_request
+def before_request():
+    """在每个请求前执行"""
+    g.user = CURRENT_USER
+    g.request_time = datetime.datetime.now()
+
+@app.context_processor
+def inject_user():
+    """向所有模板注入用户信息"""
+    return {
+        'current_user': getattr(g, 'user', CURRENT_USER),
+        'request_time': getattr(g, 'request_time', datetime.datetime.now())
+    }
+
+@app.after_request
+def after_request(response):
+    """在每个请求完成后执行 - 自定义HTTP访问日志"""
+    end_time = datetime.datetime.now()
+    duration = (end_time - g.request_time).total_seconds() * 1000  # 毫秒
+    
+    # 自定义格式的HTTP访问日志
+    print(f"[HTTP] {g.request_time.strftime('%Y-%m-%d %H:%M:%S')} | "
+          f"User: {g.user} | "
+          f"IP: {request.remote_addr or 'Unknown'} | "
+          f"{request.method} {request.path} | "
+          f"Status: {response.status_code} | "
+          f"Duration: {duration:.1f}ms")
+    
+    return response
 
 class PDFDocumentManager:
     def __init__(self, base_path):
@@ -200,6 +232,14 @@ def api_release_documents(release):
 def api_search():
     """搜索API"""
     query = request.args.get('q', '')
+    
+    # 获取请求头中的用户信息
+    x_user = request.headers.get('X-User', g.user)
+    x_request_time = request.headers.get('X-Request-Time', '')
+    
+    # 额外的日志记录，显示搜索查询
+    print(f"[SEARCH] User: {x_user} | Query: '{query}' | Time: {x_request_time}")
+    
     if len(query.strip()) < 2:
         return jsonify([])
     
@@ -242,6 +282,7 @@ def view_release(release):
 @app.route('/pdf/<path:file_path>')
 def view_pdf(file_path):
     """查看PDF文件"""
+    
     # 构建完整路径
     full_path = doc_manager.base_path / file_path
     
@@ -257,6 +298,7 @@ def view_pdf(file_path):
 @app.route('/download/<path:file_path>')
 def download_pdf(file_path):
     """下载PDF文件"""
+    
     full_path = doc_manager.base_path / file_path
     
     if not full_path.exists() or not full_path.is_file():
@@ -291,4 +333,37 @@ if __name__ == '__main__':
     print(f"Release数量: {stats['total_releases']}")
     print(f"PDF文件数量: {stats['total_pdfs']}")
     print(f"总大小: {doc_manager.format_size(stats['total_size'])}")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    
+    # 终极解决方案：重定向stdout并过滤Werkzeug日志
+    import logging
+    import sys
+    import re
+    from io import StringIO
+    
+    # 禁用werkzeug logger
+    logging.getLogger('werkzeug').disabled = True
+    
+    # 创建自定义的stdout过滤器
+    class WerkzeugLogFilter:
+        def __init__(self, original_stdout):
+            self.original_stdout = original_stdout
+            self.werkzeug_pattern = re.compile(r'^\d+\.\d+\.\d+\.\d+ - - \[.*?\] ".*?" \d+ -\s*$')
+            
+        def write(self, message):
+            # 如果不是Werkzeug的HTTP日志格式，就正常输出
+            if not self.werkzeug_pattern.match(message.strip()):
+                self.original_stdout.write(message)
+                
+        def flush(self):
+            self.original_stdout.flush()
+            
+        def __getattr__(self, name):
+            return getattr(self.original_stdout, name)
+    
+    # 替换系统的stdout
+    original_stdout = sys.stdout
+    sys.stdout = WerkzeugLogFilter(original_stdout)
+    
+    print("已启用自定义日志过滤器，只显示应用自定义日志...")
+    
+    app.run(debug=False, host='0.0.0.0', port=5000, threaded=True, use_reloader=False)
