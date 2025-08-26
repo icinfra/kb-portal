@@ -108,6 +108,36 @@
             right: 0;
             z-index: 1030; /* 确保在其他内容之上 */
         }
+        
+        /* 用户名设置相关样式 */
+        .username-display {
+            cursor: pointer !important;
+            transition: all 0.2s ease;
+            padding: 6px 12px !important;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            user-select: none;
+        }
+        
+        .username-display:hover {
+            background-color: rgba(255, 255, 255, 0.15) !important;
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        .username-display:active {
+            transform: translateY(0);
+            background-color: rgba(255, 255, 255, 0.2) !important;
+        }
+        
+        .username-modal .modal-body {
+            padding: 2rem;
+        }
+        
+        .username-input {
+            font-size: 1.1rem;
+            padding: 0.75rem;
+        }
     </style>
 </head>
 <body>
@@ -131,10 +161,14 @@
                     <div id="searchResults" class="search-results"></div>
                 </div>
                 <div class="navbar-nav">
-                    <span class="navbar-text text-light">
+                    <span class="navbar-text text-light username-display" title="点击修改用户名">
                         <i class="bi bi-person-circle me-1"></i>
-                        用户: {{ current_user }}
+                        用户: <span id="currentUsername">{{ current_user }}</span>
+                        <i class="bi bi-pencil-square ms-1" style="font-size: 0.8em;"></i>
                     </span>
+                    <button class="btn btn-outline-light btn-sm ms-2" onclick="testUserTransmission()" title="测试用户名传递">
+                        <i class="bi bi-bug"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -180,12 +214,40 @@
         </div>
     </main>
 
+    <!-- 用户名设置模态框 -->
+    <div class="modal fade username-modal" id="usernameModal" tabindex="-1" aria-labelledby="usernameModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="usernameModalLabel">
+                        <i class="bi bi-person-gear me-2"></i>设置用户名
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="usernameInput" class="form-label">请输入您的用户名：</label>
+                        <input type="text" class="form-control username-input" id="usernameInput" 
+                               placeholder="输入用户名" maxlength="50">
+                        <div class="form-text">用户名将保存在浏览器本地，用于标识您的访问记录。</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveUsername()">
+                        <i class="bi bi-check-lg me-1"></i>保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <footer class="bg-dark text-light text-center py-3 mt-5 fixed-footer">
         <div class="container">
             <div class="row">
                 <div class="col-md-6 text-start">
                     <small>
-                        <i class="bi bi-person-fill me-1"></i>当前用户: {{ current_user }}
+                        <i class="bi bi-person-fill me-1"></i><span id="footerUsername">当前用户: {{ current_user }}</span>
                     </small>
                 </div>
                 <div class="col-md-6 text-end">
@@ -200,6 +262,335 @@
 
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
     <script>
+        // 用户名管理
+        const SERVER_USER = '{{ current_user }}';  // 服务器端用户名作为备用
+        const STORAGE_KEY = 'kb_portal_username';
+        let currentUsername = localStorage.getItem(STORAGE_KEY) || SERVER_USER;  // 优先使用localStorage
+        
+        // 页面加载时检查用户名设置
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, server user:', SERVER_USER, 'stored user:', localStorage.getItem(STORAGE_KEY));
+            initializeUsername();
+            
+            // 设置全局的fetch拦截器，自动添加用户名到请求头
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                const [url, options = {}] = args;
+                
+                // 确保headers存在
+                if (!options.headers) {
+                    options.headers = {};
+                }
+                
+                // 添加用户名到请求头
+                const username = localStorage.getItem(STORAGE_KEY) || currentUsername;
+                options.headers['X-User'] = username;
+                options.headers['X-Request-Time'] = new Date().toISOString();
+                
+                console.log('Fetch intercepted, adding user header:', username);
+                return originalFetch.call(this, url, options);
+            };
+            
+            // 添加点击事件监听器作为备用
+            // 为用户名显示区域绑定点击事件（移除inline onclick，使用事件监听器）
+            const usernameDisplay = document.querySelector('.username-display');
+            if (usernameDisplay) {
+                // 移除inline的onclick属性，避免重复绑定
+                usernameDisplay.removeAttribute('onclick');
+                
+                usernameDisplay.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Username display clicked');
+                    openUsernameModal(false);
+                });
+                
+                // 添加键盘支持
+                usernameDisplay.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openUsernameModal(false);
+                    }
+                });
+                
+                // 使其可以通过键盘焦点访问
+                usernameDisplay.setAttribute('tabindex', '0');
+                usernameDisplay.setAttribute('role', 'button');
+                usernameDisplay.setAttribute('aria-label', '点击修改用户名');
+            }
+            
+            // 拦截所有的页面导航，添加用户名参数
+            interceptPageNavigation();
+        });
+        
+        function interceptPageNavigation() {
+            // 拦截所有链接点击
+            document.addEventListener('click', function(e) {
+                const link = e.target.closest('a');
+                if (link && link.href && !link.href.startsWith('javascript:')) {
+                    const url = new URL(link.href);
+                    const username = localStorage.getItem(STORAGE_KEY) || currentUsername;
+                    url.searchParams.set('user', username);
+                    link.href = url.toString();
+                    console.log('Link intercepted, added user param:', username);
+                }
+            });
+            
+            // 拦截表单提交
+            document.addEventListener('submit', function(e) {
+                const form = e.target;
+                if (form.tagName === 'FORM') {
+                    const username = localStorage.getItem(STORAGE_KEY) || currentUsername;
+                    
+                    // 添加隐藏字段
+                    const userInput = document.createElement('input');
+                    userInput.type = 'hidden';
+                    userInput.name = 'user';
+                    userInput.value = username;
+                    form.appendChild(userInput);
+                    
+                    console.log('Form intercepted, added user field:', username);
+                }
+            });
+        }
+        
+        function initializeUsername() {
+            console.log('=== initializeUsername called ===');
+            
+            // 从localStorage获取保存的用户名
+            const savedUsername = localStorage.getItem(STORAGE_KEY);
+            console.log('Saved username from localStorage:', savedUsername);
+            console.log('Server username (SERVER_USER):', SERVER_USER);
+            
+            if (savedUsername && savedUsername.trim() !== '') {
+                currentUsername = savedUsername;
+                console.log('Using saved username:', currentUsername);
+                
+                // 设置Cookie，确保服务器端也能获取到
+                const cookieValue = `user=${encodeURIComponent(currentUsername)}; path=/; max-age=31536000`;
+                document.cookie = cookieValue;
+                console.log('Set cookie:', cookieValue);
+                
+                updateUsernameDisplay(currentUsername);
+            } else {
+                console.log('No saved username, using server username:', SERVER_USER);
+                // 如果没有保存的用户名，使用服务器端的用户名
+                currentUsername = SERVER_USER;
+                
+                // 也设置Cookie
+                const cookieValue = `user=${encodeURIComponent(currentUsername)}; path=/; max-age=31536000`;
+                document.cookie = cookieValue;
+                console.log('Set cookie:', cookieValue);
+                
+                updateUsernameDisplay(currentUsername);
+                
+                // 如果服务器端用户名也是默认值，显示设置模态框
+                if (SERVER_USER === 'unknown' || SERVER_USER === 'ben') {
+                    console.log('Showing username modal automatically for default user');
+                    setTimeout(() => {
+                        openUsernameModal(true);
+                    }, 500);
+                }
+            }
+            
+            console.log('=== initializeUsername complete ===');
+        }
+        
+        function openUsernameModal(isFirstTime = false) {
+            console.log('openUsernameModal called, isFirstTime:', isFirstTime);
+            
+            try {
+                const modalElement = document.getElementById('usernameModal');
+                if (!modalElement) {
+                    console.error('Modal element not found!');
+                    alert('模态框元素未找到，请刷新页面重试。');
+                    return;
+                }
+                
+                // 确保Bootstrap已加载
+                if (typeof bootstrap === 'undefined') {
+                    console.error('Bootstrap not loaded!');
+                    alert('Bootstrap未加载，请刷新页面重试。');
+                    return;
+                }
+                
+                const modal = new bootstrap.Modal(modalElement);
+                const input = document.getElementById('usernameInput');
+                
+                if (!input) {
+                    console.error('Username input not found!');
+                    alert('用户名输入框未找到，请刷新页面重试。');
+                    return;
+                }
+                
+                // 设置当前用户名作为默认值
+                input.value = currentUsername;
+                
+                // 如果是首次设置，修改标题
+                const modalTitle = document.getElementById('usernameModalLabel');
+                if (modalTitle) {
+                    if (isFirstTime) {
+                        modalTitle.innerHTML = '<i class="bi bi-person-plus me-2"></i>欢迎！请设置您的用户名';
+                    } else {
+                        modalTitle.innerHTML = '<i class="bi bi-person-gear me-2"></i>修改用户名';
+                    }
+                }
+                
+                console.log('Showing modal...');
+                modal.show();
+                
+                // 聚焦到输入框
+                setTimeout(() => {
+                    input.focus();
+                    input.select();
+                }, 300);
+                
+            } catch (error) {
+                console.error('Error opening modal:', error);
+                // 如果Bootstrap Modal失败，使用原生prompt作为备用
+                const newUsername = prompt('请输入用户名:', currentUsername);
+                if (newUsername && newUsername.trim() !== '') {
+                    localStorage.setItem(STORAGE_KEY, newUsername.trim());
+                    currentUsername = newUsername.trim();
+                    updateUsernameDisplay(currentUsername);
+                    showNotification('用户名保存成功！', 'success');
+                }
+            }
+        }
+        
+        function saveUsername() {
+            console.log('saveUsername called');
+            const input = document.getElementById('usernameInput');
+            const username = input.value.trim();
+            
+            console.log('Input username:', username);
+            
+            if (username === '') {
+                alert('请输入用户名！');
+                input.focus();
+                return;
+            }
+            
+            if (username.length > 50) {
+                alert('用户名太长，请控制在50个字符以内！');
+                input.focus();
+                return;
+            }
+            
+            // 保存到localStorage
+            localStorage.setItem(STORAGE_KEY, username);
+            
+            // 设置Cookie，让服务器端也能获取到
+            const cookieValue = `user=${encodeURIComponent(username)}; path=/; max-age=31536000`;
+            document.cookie = cookieValue;
+            console.log('Cookie set:', cookieValue);
+            
+            currentUsername = username;
+            console.log('Username saved to localStorage, cookie, and currentUsername updated:', username);
+            
+            // 验证cookie是否设置成功
+            setTimeout(() => {
+                const cookies = document.cookie;
+                console.log('Current cookies:', cookies);
+                const userCookie = cookies.split(';').find(c => c.trim().startsWith('user='));
+                console.log('User cookie:', userCookie);
+            }, 100);
+            
+            // 更新页面显示
+            updateUsernameDisplay(username);
+            
+            // 关闭模态框
+            const modal = bootstrap.Modal.getInstance(document.getElementById('usernameModal'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            // 显示成功提示，并建议刷新页面
+            showNotification('用户名保存成功！建议刷新页面以确保所有请求都使用新用户名。', 'success');
+            
+            // 3秒后自动刷新页面，确保所有请求都使用新用户名
+            setTimeout(() => {
+                if (confirm('是否刷新页面以确保所有请求都使用新用户名？')) {
+                    location.reload();
+                }
+            }, 3000);
+        }
+        
+        function updateUsernameDisplay(username) {
+            console.log('updateUsernameDisplay called with:', username);
+            
+            // 强制更新显示，不跳过相同用户名的更新（因为页面可能已刷新）
+            // if (updateUsernameDisplay.lastUpdate === username) {
+            //     console.log('Same username, skipping update');
+            //     return;
+            // }
+            updateUsernameDisplay.lastUpdate = username;
+            
+            // 更新导航栏
+            const currentUsernameElement = document.getElementById('currentUsername');
+            if (currentUsernameElement) {
+                currentUsernameElement.textContent = username;
+                console.log('Updated navbar username to:', username);
+            }
+            
+            // 更新页脚
+            const footerElement = document.getElementById('footerUsername');
+            if (footerElement) {
+                footerElement.innerHTML = `<i class="bi bi-person-fill me-1"></i>当前用户: ${username}`;
+                console.log('Updated footer username to:', username);
+            }
+        }
+        
+        function showNotification(message, type = 'info') {
+            // 创建通知元素
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+        }
+        
+        // 测试用户名传递功能
+        function testUserTransmission() {
+            const username = localStorage.getItem(STORAGE_KEY) || currentUsername;
+            console.log('Testing user transmission...');
+            console.log('Current username:', username);
+            console.log('Current cookies:', document.cookie);
+            
+            // 测试API请求
+            fetch('/api/search?q=test')
+                .then(response => {
+                    console.log('API test completed');
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('API response:', data);
+                    alert(`测试完成！\n当前用户名: ${username}\n请检查服务器日志确认用户名传递是否正确。`);
+                })
+                .catch(error => {
+                    console.error('API test failed:', error);
+                    alert('测试失败，请查看控制台错误信息。');
+                });
+        }
+        
+        // 监听Enter键保存用户名
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && document.getElementById('usernameModal').classList.contains('show')) {
+                saveUsername();
+            }
+        });
+
         // 搜索功能
         const searchInput = document.getElementById('searchInput');
         const searchResults = document.getElementById('searchResults');
@@ -215,14 +606,8 @@
             }
             
             searchTimeout = setTimeout(() => {
-                fetch(`/api/search?q=${encodeURIComponent(query)}`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-User': '{{ current_user }}',
-                        'X-Request-Time': '{{ request_time.isoformat() if request_time else "" }}'
-                    }
-                })
+                // 使用fetch，全局拦截器会自动添加用户名
+                fetch(`/api/search?q=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(data => {
                         showSearchResults(data);
@@ -276,6 +661,228 @@
                 searchResults.style.display = 'none';
             }
         });
+
+        // 简单的用户显示更新
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUserDisplayFromURL();
+        });
+
+        function updateUserDisplayFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentUser = urlParams.get('user');
+            
+            if (currentUser) {
+                updateUserDisplay(currentUser);
+            }
+        }
+
+        function updateUserDisplay(username) {
+            const currentUsernameSpan = document.getElementById('currentUsername');
+            if (currentUsernameSpan) {
+                currentUsernameSpan.textContent = username;
+            }
+            
+            const footerUser = document.getElementById('footerUsername');
+            if (footerUser) {
+                footerUser.textContent = `当前用户: ${username}`;
+            }
+        }
+
+        // 确保所有AJAX请求都包含用户信息
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const [url, options = {}] = args;
+            
+            // 添加用户信息到请求头
+            options.headers = options.headers || {};
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentUser = urlParams.get('user');
+            if (currentUser && currentUser !== 'unknown') {
+                options.headers['X-User'] = currentUser;
+            }
+            
+            return originalFetch(url, options);
+        };
+
+        // 用户检测和自动重定向功能
+        document.addEventListener('DOMContentLoaded', function() {
+            handleUserDetection();
+        });
+
+        function handleUserDetection() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let currentUser = urlParams.get('user');
+            
+            // 如果URL中已有user参数，直接使用
+            if (currentUser) {
+                updateUserDisplay(currentUser);
+                return;
+            }
+            
+            // 尝试从多种来源自动检测用户
+            currentUser = detectUserFromEnvironment();
+            
+            if (currentUser && currentUser !== 'unknown') {
+                // 自动重定向到带user参数的URL
+                redirectWithUser(currentUser);
+                return;
+            }
+            
+            // 如果无法自动检测，显示用户输入界面
+            showUserInput();
+        }
+
+        function detectUserFromEnvironment() {
+            // 方法1: 检查是否通过特殊方式启动Firefox（环境变量注入）
+            // Firefox可以通过 --env 参数或其他方式传递环境信息
+            
+            // 检查document.referrer或特殊标记
+            if (document.referrer && document.referrer.includes('user=')) {
+                const match = document.referrer.match(/user=([^&]+)/);
+                if (match) return decodeURIComponent(match[1]);
+            }
+            
+            // 方法2: 检查localStorage中之前保存的用户
+            const savedUser = localStorage.getItem('clientUser');
+            if (savedUser) return savedUser;
+            
+            // 方法3: 检查是否在特殊环境中（例如通过代理或包装器启动）
+            // 检查window.name或其他可能的信息传递方式
+            if (window.name && window.name.startsWith('user:')) {
+                const user = window.name.substring(5);
+                if (user) {
+                    localStorage.setItem('clientUser', user);
+                    return user;
+                }
+            }
+            
+            // 方法4: 检查fragment中的用户信息
+            if (window.location.hash && window.location.hash.includes('user=')) {
+                const match = window.location.hash.match(/user=([^&]+)/);
+                if (match) {
+                    const user = decodeURIComponent(match[1]);
+                    localStorage.setItem('clientUser', user);
+                    return user;
+                }
+            }
+            
+            // 方法5: 通过特殊的API端点尝试获取
+            // 这需要服务端配合
+            return tryServerDetection();
+        }
+
+        function tryServerDetection() {
+            // 尝试从服务端获取用户信息（如果服务端能够识别）
+            try {
+                // 发送一个同步请求尝试获取用户信息
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', '/api/detect-user', false); // 同步请求
+                xhr.send();
+                
+                if (xhr.status === 200) {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.user && response.user !== 'unknown') {
+                        localStorage.setItem('clientUser', response.user);
+                        return response.user;
+                    }
+                }
+            } catch (e) {
+                // 服务端可能不支持用户检测
+            }
+            
+            return null;
+        }
+
+        function showUserInput() {
+            // 创建一个模态对话框
+            const modalHtml = `
+                <div id="userInputModal" class="modal fade show" style="display: block;" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title">
+                                    <i class="bi bi-person-circle me-2"></i>用户身份确认
+                                </h5>
+                            </div>
+                            <div class="modal-body">
+                                <p>为了在服务端正确记录访问日志，请输入您的用户名：</p>
+                                <div class="mb-3">
+                                    <label for="userInput" class="form-label">用户名</label>
+                                    <input type="text" class="form-control" id="userInput" 
+                                           placeholder="请输入您的用户名" autofocus>
+                                </div>
+                                <div class="alert alert-info">
+                                    <small>
+                                        <strong>提示：</strong><br>
+                                        • Windows用户：通常是您的Windows账户名<br>
+                                        • Linux/Mac用户：通常是您的 $USER 环境变量值<br>
+                                        • 此信息将保存在浏览器本地，下次访问自动使用
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-primary" id="confirmUserBtn">
+                                    确认并继续
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-backdrop fade show"></div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            const input = document.getElementById('userInput');
+            const confirmBtn = document.getElementById('confirmUserBtn');
+            
+            // 回车键确认
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    confirmUser();
+                }
+            });
+            
+            confirmBtn.addEventListener('click', confirmUser);
+        }
+
+        function confirmUser() {
+            const input = document.getElementById('userInput');
+            const user = input.value.trim();
+            
+            if (!user) {
+                input.focus();
+                input.style.borderColor = '#dc3545';
+                setTimeout(() => {
+                    input.style.borderColor = '';
+                }, 2000);
+                return;
+            }
+            
+            // 保存用户信息到本地存储
+            localStorage.setItem('clientUser', user);
+            
+            // 重定向到带user参数的URL
+            redirectWithUser(user);
+        }
+
+        function redirectWithUser(user) {
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.set('user', user);
+            window.location.replace(newUrl.toString());
+        }
+
+        function updateUserDisplay(username) {
+            const currentUsernameSpan = document.getElementById('currentUsername');
+            if (currentUsernameSpan) {
+                currentUsernameSpan.textContent = username;
+            }
+            
+            const footerUser = document.getElementById('footerUsername');
+            if (footerUser) {
+                footerUser.textContent = `当前用户: ${username}`;
+            }
+        }
     </script>
     {% block scripts %}{% endblock %}
 </body>

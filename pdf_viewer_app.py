@@ -8,25 +8,35 @@ PDF 文档查看器 Flask 应用
 import os
 import re
 from pathlib import Path
-from flask import Flask, render_template, send_file, jsonify, request, url_for, g
+from flask import Flask, render_template, send_file, jsonify, request, url_for, g, redirect
+from collections import defaultdict
+import mimetypes
 import datetime
 
 app = Flask(__name__)
 
-# 获取当前用户信息
-CURRENT_USER = os.environ.get('USER', os.environ.get('USERNAME', 'unknown'))
+# 默认用户信息（作为后备）
+DEFAULT_USER = os.environ.get('USER', os.environ.get('USERNAME', 'unknown'))
 
 @app.before_request
 def before_request():
     """在每个请求前执行"""
-    g.user = CURRENT_USER
+    # 从多个来源获取用户信息，按优先级排序
+    user = (
+        request.headers.get('X-User') or           # 1. 请求头
+        request.cookies.get('user') or             # 2. Cookie
+        request.args.get('user') or                # 3. URL参数
+        DEFAULT_USER                               # 4. 服务器环境变量（后备）
+    )
+    
+    g.user = user
     g.request_time = datetime.datetime.now()
 
 @app.context_processor
 def inject_user():
     """向所有模板注入用户信息"""
     return {
-        'current_user': getattr(g, 'user', CURRENT_USER),
+        'current_user': getattr(g, 'user', DEFAULT_USER),
         'request_time': getattr(g, 'request_time', datetime.datetime.now())
     }
 
@@ -221,6 +231,66 @@ def index():
 def api_releases():
     """获取release列表API"""
     return jsonify(doc_manager.get_releases())
+
+@app.route('/api/user', methods=['GET', 'POST'])
+def api_user():
+    """用户信息API"""
+    if request.method == 'POST':
+        # 设置用户信息
+        data = request.get_json()
+        if data and 'username' in data:
+            username = data['username'].strip()
+            if username:
+                response = jsonify({'status': 'success', 'username': username})
+                response.set_cookie('user', username, max_age=30*24*60*60)  # 30天有效期
+                return response
+        return jsonify({'status': 'error', 'message': '用户名不能为空'}), 400
+    else:
+        # 获取当前用户信息
+        return jsonify({'username': g.user})
+
+@app.route('/api/detect-user')
+def api_detect_user():
+    """尝试自动检测用户信息"""
+    # 检查多种来源
+    detected_user = None
+    
+    # 1. 检查HTTP头中的环境变量信息
+    user_from_header = request.headers.get('X-User-Env')
+    if user_from_header:
+        detected_user = user_from_header
+    
+    # 2. 检查User-Agent中的自定义信息
+    user_agent = request.headers.get('User-Agent', '')
+    if 'UserEnv=' in user_agent:
+        try:
+            start = user_agent.find('UserEnv=') + 8
+            end = user_agent.find(' ', start)
+            if end == -1:
+                end = len(user_agent)
+            detected_user = user_agent[start:end]
+        except:
+            pass
+    
+    # 3. 检查特殊的Cookie
+    env_cookie = request.cookies.get('env_user')
+    if env_cookie:
+        detected_user = env_cookie
+    
+    # 4. 如果都没有，返回服务端的环境变量作为提示
+    if not detected_user:
+        detected_user = DEFAULT_USER
+    
+    return jsonify({
+        'user': detected_user,
+        'source': 'auto-detected',
+        'methods': [
+            'HTTP Header: X-User-Env',
+            'User-Agent: UserEnv=username',
+            'Cookie: env_user',
+            'Server fallback'
+        ]
+    })
 
 @app.route('/api/release/<release>')
 def api_release_documents(release):
