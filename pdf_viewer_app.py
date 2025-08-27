@@ -208,10 +208,24 @@ class PDFDocumentManager:
     
     def get_stats(self):
         """获取统计信息"""
+        # 计算PDF文档总大小
+        total_pdf_size = sum(doc['size'] for doc in self.all_pdfs)
+        
+        # 计算ZIP文件总大小
+        total_zip_size = sum(zip_info['size'] for zip_info in self.release_zips.values())
+        
         return {
+            'release_folders_count': len(self.releases),
+            'release_folders_pdf_count': len(self.all_pdfs),
+            'release_folders_total_size': total_pdf_size,
+            'release_folders_total_size_human': self.format_size(total_pdf_size),
+            'release_zips_count': len(self.release_zips),
+            'release_zips_total_size': total_zip_size,
+            'release_zips_total_size_human': self.format_size(total_zip_size),
+            # 保留原有字段以兼容现有代码
             'total_releases': len(self.releases),
             'total_pdfs': len(self.all_pdfs),
-            'total_size': sum(doc['size'] for doc in self.all_pdfs)
+            'total_size': total_pdf_size
         }
 
 # 初始化文档管理器
@@ -222,8 +236,6 @@ def index():
     """主页 - 显示所有releases和zip文件"""
     releases = doc_manager.get_all_releases_with_zips()
     stats = doc_manager.get_stats()
-    stats['total_releases_with_zips'] = len(releases)
-    stats['total_zip_files'] = len(doc_manager.release_zips)
     
     return render_template('index.html', releases=releases, stats=stats)
 
