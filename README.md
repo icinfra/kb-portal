@@ -2,6 +2,9 @@
 
 知识库门户 - 一个用于管理和展示技术文档的 Web 门户系统。
 
+<img width="1117" height="819" alt="image" src="https://github.com/user-attachments/assets/ab4a1332-77ff-4942-8e3f-ed15ccdc8bfd" />
+
+
 ## 项目简介
 
 KB Portal 是 ICInfra 组织开发的知识库管理系统，旨在为团队提供统一的技术文档管理和展示平台。该项目专注于 EDA 工具、基础设施管理和技术知识的整理与分享。
