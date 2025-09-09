@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}知识库 - {{ super() }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-book me-2"></i>知识库
+        </h1>
+        
+        {% if stats %}
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-primary">{{ stats.knowledge_base_count }}</h5>
+                        <p class="card-text">知识库分类</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-success">{{ stats.knowledge_base_doc_count }}</h5>
+                        <p class="card-text">总文档数</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-info">
+                            {% if stats.type_stats.pdf %}{{ stats.type_stats.pdf.count }}{% else %}0{% endif %}
+                        </h5>
+                        <p class="card-text">PDF文件</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-warning">
+                            {% if stats.type_stats.mhtml %}{{ stats.type_stats.mhtml.count }}{% else %}0{% endif %}
+                        </h5>
+                        <p class="card-text">MHTML文件</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if releases %}
+        <div class="row">
+            {% for release in releases %}
+            <div class="col-lg-4 col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            {% if release.is_zip %}
+                                <i class="bi bi-file-zip text-warning me-2"></i>
+                            {% else %}
+                                <i class="bi bi-folder text-primary me-2"></i>
+                            {% endif %}
+                            {{ release.name }}
+                        </h5>
+                        
+                        {% if release.is_zip %}
+                            <p class="card-text">
+                                <small class="text-muted">
+                                    <i class="bi bi-hdd"></i> {{ release.size_human }}
+                                </small>
+                            </p>
+                            <a href="{{ url_for('view_release', category='knowledge_base', release=release.name) }}" 
+                               class="btn btn-warning btn-sm">
+                                <i class="bi bi-download"></i> 下载
+                            </a>
+                        {% else %}
+                            <p class="card-text">
+                                <small class="text-muted">
+                                    <i class="bi bi-files"></i> {{ release.doc_count }} 个文档
+                                </small>
+                            </p>
+                            <a href="{{ url_for('view_release', category='knowledge_base', release=release.name) }}" 
+                               class="btn btn-primary btn-sm">
+                                <i class="bi bi-eye"></i> 查看
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>暂无知识库内容
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

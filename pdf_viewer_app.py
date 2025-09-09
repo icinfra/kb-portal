@@ -59,84 +59,145 @@ def after_request(response):
 class PDFDocumentManager:
     def __init__(self, base_path):
         self.base_path = Path(base_path)
-        self.releases = {}
+        self.product_manual_releases = {}  # ProductManual目录下的内容
+        self.knowledge_base_releases = {}  # 其他目录下的内容
         self.release_zips = {}  # 存储zip文件信息
-        self.all_pdfs = []  # 用于搜索索引
+        self.all_documents = []  # 用于搜索索引（包含所有类型文件）
+        self.supported_extensions = {'.pdf', '.mhtml', '.mht', '.zip', '.rar', '.7z', '.tar', '.gz'}
         self.scan_documents()
     
     def scan_documents(self):
-        """扫描所有PDF文件和ZIP文件并按release组织"""
+        """扫描所有支持的文件并按分类组织"""
         print(f"开始扫描目录: {self.base_path}")
         
-        # 扫描所有PDF文件
-        pdf_files = list(self.base_path.rglob("*.pdf"))
-        print(f"找到 {len(pdf_files)} 个PDF文件")
+        # 扫描所有支持的文件
+        all_files = []
+        for ext in ['.pdf', '.mhtml', '.mht', '.zip', '.rar', '.7z', '.tar', '.gz']:  # 包含所有支持的文件类型
+            files = list(self.base_path.rglob(f"*{ext}"))
+            all_files.extend(files)
         
-        for pdf_file in pdf_files:
-            self.add_document(pdf_file)
+        print(f"找到 {len(all_files)} 个文档文件")
         
-        # 扫描release级别的ZIP文件
+        for file in all_files:
+            self.add_document(file)
+        
+        # 扫描release级别的ZIP文件（根目录下的压缩包）
         self.scan_release_zips()
         
-        print(f"文档结构构建完成，共 {len(self.releases)} 个Release")
-        print(f"找到 {len(self.release_zips)} 个Release ZIP文件")
+        print(f"文档结构构建完成:")
+        print(f"  - Product Manual: {len(self.product_manual_releases)} 个Release")
+        print(f"  - Knowledge Base: {len(self.knowledge_base_releases)} 个Release")
+        print(f"  - Release ZIP文件: {len(self.release_zips)} 个")
     
     def scan_release_zips(self):
-        """扫描与release同级的ZIP文件"""
-        zip_files = list(self.base_path.glob("*.zip"))
+        """扫描与release同级的ZIP文件和压缩包"""
+        archive_extensions = ['.zip', '.rar', '.7z', '.tar', '.gz']
         
-        for zip_file in zip_files:
-            zip_name = zip_file.stem  # 不包含扩展名的文件名
+        for ext in archive_extensions:
+            archive_files = list(self.base_path.glob(f"*{ext}"))
             
-            # 检查是否存在同名的release目录
-            release_dir = self.base_path / zip_name
-            if not release_dir.exists() or not release_dir.is_dir():
-                # 如果没有同名目录，则添加这个ZIP文件
-                self.release_zips[zip_name] = {
-                    'name': zip_file.name,
-                    'path': str(zip_file),
-                    'size': zip_file.stat().st_size,
-                    'size_human': self.format_size(zip_file.stat().st_size),
-                    'is_zip': True
-                }
+            for archive_file in archive_files:
+                archive_name = archive_file.stem  # 不包含扩展名的文件名
+                
+                # 检查是否存在同名的release目录
+                release_dir = self.base_path / archive_name
+                if not release_dir.exists() or not release_dir.is_dir():
+                    # 如果没有同名目录，则添加这个压缩文件
+                    self.release_zips[archive_name] = {
+                        'name': archive_file.name,
+                        'path': str(archive_file),
+                        'size': archive_file.stat().st_size,
+                        'size_human': self.format_size(archive_file.stat().st_size),
+                        'type': 'archive',
+                        'is_zip': True
+                    }
     
-    def add_document(self, pdf_path):
-        """添加文档到release结构中"""
-        relative_path = pdf_path.relative_to(self.base_path)
+    def add_document(self, file_path):
+        """添加文档到对应分类的release结构中"""
+        relative_path = file_path.relative_to(self.base_path)
         parts = relative_path.parts
         
         if len(parts) < 2:
             return
         
-        # 第一级目录就是release名称
-        release_name = parts[0]
+        # 第一级目录决定分类
+        top_level_dir = parts[0]
         
-        # 构建相对路径（去掉release名称）
-        if len(parts) > 1:
-            relative_in_release = '/'.join(parts[1:])
+        # 判断是ProductManual还是Knowledge Base
+        is_product_manual = top_level_dir.lower() == 'productmanual'
+        
+        # 如果是ProductManual目录下的文件
+        if is_product_manual:
+            # 对于ProductManual目录下的直接压缩包文件
+            if len(parts) == 2 and self.get_file_type(file_path.suffix.lower()) == 'archive':
+                # 这是ProductManual目录下的压缩包，创建虚拟release
+                release_name = file_path.stem  # 文件名（不含扩展名）作为release名
+                target_releases = self.product_manual_releases
+            else:
+                # ProductManual目录下的子目录文件
+                if len(parts) < 3:
+                    return  # 至少需要ProductManual/Release/file结构
+                release_name = parts[1]  # ProductManual/Release/...
+                target_releases = self.product_manual_releases
         else:
-            relative_in_release = parts[-1]
+            # Knowledge Base分类
+            release_name = parts[0]  # 顶级目录作为release名
+            target_releases = self.knowledge_base_releases
+        
+        # 构建相对路径
+        if is_product_manual and len(parts) >= 3:
+            # ProductManual/Release/subdir/file -> subdir/file
+            relative_in_release = '/'.join(parts[2:])
+        elif is_product_manual and len(parts) == 2:
+            # ProductManual/archive.zip -> archive.zip
+            relative_in_release = parts[1]
+        else:
+            # Knowledge Base: TopDir/subdir/file -> subdir/file
+            relative_in_release = '/'.join(parts[1:])
         
         file_name = parts[-1]
-        file_size = pdf_path.stat().st_size
+        file_size = file_path.stat().st_size
+        file_ext = file_path.suffix.lower()
+        
+        # 确定文件类型
+        file_type = self.get_file_type(file_ext)
+        
+        # 确定分类
+        category = 'product_manual' if is_product_manual else 'knowledge_base'
         
         # 构建文档信息
         doc_info = {
             'name': file_name,
-            'path': str(pdf_path),
+            'path': str(file_path),
             'relative_path': str(relative_path),
             'relative_in_release': relative_in_release,
             'size': file_size,
             'size_human': self.format_size(file_size),
-            'release': release_name
+            'release': release_name,
+            'type': file_type,
+            'category': category,  # 添加分类信息
+            'modified': datetime.datetime.fromtimestamp(file_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+            'absolute_path': str(file_path.absolute())
         }
         
-        # 按release组织
-        if release_name not in self.releases:
-            self.releases[release_name] = []
+        # 按分类和release组织
+        if release_name not in target_releases:
+            target_releases[release_name] = []
         
-        self.releases[release_name].append(doc_info)
-        self.all_pdfs.append(doc_info)
+        target_releases[release_name].append(doc_info)
+        self.all_documents.append(doc_info)
+    
+    def get_file_type(self, ext):
+        """根据扩展名返回文件类型"""
+        ext = ext.lower()
+        if ext == '.pdf':
+            return 'pdf'
+        elif ext in ['.mhtml', '.mht']:
+            return 'mhtml'
+        elif ext in ['.zip', '.rar', '.7z', '.tar', '.gz']:
+            return 'archive'
+        else:
+            return 'unknown'
     
     def format_size(self, size_bytes):
         """格式化文件大小"""
@@ -149,39 +210,60 @@ class PDFDocumentManager:
         else:
             return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
     
-    def get_releases(self):
-        """获取所有release列表，包括zip文件"""
-        return sorted(self.releases.keys())
+    def get_releases(self, category='product_manual'):
+        """获取指定分类的release列表"""
+        if category == 'product_manual':
+            return sorted(self.product_manual_releases.keys())
+        elif category == 'knowledge_base':
+            return sorted(self.knowledge_base_releases.keys())
+        else:
+            # 返回所有
+            all_releases = list(self.product_manual_releases.keys()) + list(self.knowledge_base_releases.keys())
+            return sorted(all_releases)
     
-    def get_all_releases_with_zips(self):
-        """获取所有release和zip文件的统一列表"""
+    def get_all_releases_with_zips(self, category='product_manual'):
+        """获取指定分类的所有release和zip文件的统一列表"""
         all_releases = []
         
-        # 添加正常的release目录
-        for release_name in sorted(self.releases.keys()):
+        # 根据分类选择数据源
+        if category == 'product_manual':
+            releases = self.product_manual_releases
+        elif category == 'knowledge_base':
+            releases = self.knowledge_base_releases
+        else:
+            # 合并所有分类
+            releases = {**self.product_manual_releases, **self.knowledge_base_releases}
+        
+        # 添加该分类的release目录
+        for release_name in sorted(releases.keys()):
             all_releases.append({
                 'name': release_name,
                 'type': 'directory',
                 'is_zip': False,
-                'doc_count': len(self.releases[release_name])
+                'category': category,
+                'doc_count': len(releases[release_name])
             })
         
-        # 添加独立的zip文件
-        for zip_name, zip_info in sorted(self.release_zips.items()):
-            all_releases.append({
-                'name': zip_name,
-                'type': 'zip',
-                'is_zip': True,
-                'size_human': zip_info['size_human'],
-                'zip_path': zip_info['path']
-            })
+        # 如果是product_manual，添加独立的zip文件
+        if category == 'product_manual':
+            for zip_name, zip_info in sorted(self.release_zips.items()):
+                all_releases.append({
+                    'name': zip_name,
+                    'type': 'zip',
+                    'is_zip': True,
+                    'category': 'product_manual',
+                    'size_human': zip_info['size_human'],
+                    'zip_path': zip_info['path']
+                })
         
         return all_releases
     
-    def get_release_documents(self, release):
-        """获取指定release的所有文档"""
-        if release in self.releases:
-            return sorted(self.releases[release], key=lambda x: x['relative_in_release'])
+    def get_release_documents(self, release, category='product_manual'):
+        """获取指定分类和release的所有文档"""
+        if category == 'product_manual' and release in self.product_manual_releases:
+            return sorted(self.product_manual_releases[release], key=lambda x: x['relative_in_release'])
+        elif category == 'knowledge_base' and release in self.knowledge_base_releases:
+            return sorted(self.knowledge_base_releases[release], key=lambda x: x['relative_in_release'])
         return []
     
     def search_documents(self, query):
@@ -192,7 +274,7 @@ class PDFDocumentManager:
         results = []
         query_terms = query.lower().split()  # 简单分词
         
-        for doc in self.all_pdfs:
+        for doc in self.all_documents:
             # 构建搜索文本
             search_text = ' '.join([
                 doc['release'].lower(),
@@ -206,26 +288,69 @@ class PDFDocumentManager:
         
         return sorted(results, key=lambda x: (x['release'], x['relative_in_release']))
     
-    def get_stats(self):
-        """获取统计信息"""
-        # 计算PDF文档总大小
-        total_pdf_size = sum(doc['size'] for doc in self.all_pdfs)
+    def get_stats(self, category=None):
+        """获取统计信息
+        Args:
+            category: 可选，指定分类 ('product_manual' 或 'knowledge_base')
+                     如果为None，返回全局统计
+        """
+        # 根据分类过滤文档
+        if category == 'product_manual':
+            filtered_docs = [doc for doc in self.all_documents if doc.get('category') == 'product_manual']
+            release_count = len(self.product_manual_releases)
+        elif category == 'knowledge_base':
+            filtered_docs = [doc for doc in self.all_documents if doc.get('category') == 'knowledge_base']
+            release_count = len(self.knowledge_base_releases)
+        else:
+            # 全局统计
+            filtered_docs = self.all_documents
+            release_count = len(self.product_manual_releases) + len(self.knowledge_base_releases)
         
-        # 计算ZIP文件总大小
-        total_zip_size = sum(zip_info['size'] for zip_info in self.release_zips.values())
+        # 计算文档总大小
+        total_doc_size = sum(doc['size'] for doc in filtered_docs)
+        
+        # 按类型统计（基于过滤后的文档）
+        type_stats = {}
+        for doc in filtered_docs:
+            doc_type = doc['type']
+            if doc_type not in type_stats:
+                type_stats[doc_type] = {'count': 0, 'size': 0}
+            type_stats[doc_type]['count'] += 1
+            type_stats[doc_type]['size'] += doc['size']
+        
+        # 按分类统计（全局数据，用于分类卡片显示）
+        product_manual_docs = [doc for doc in self.all_documents if doc.get('category') == 'product_manual']
+        knowledge_base_docs = [doc for doc in self.all_documents if doc.get('category') == 'knowledge_base']
+        
+        # 计算ZIP文件总大小（根据分类过滤）
+        if category == 'product_manual':
+            filtered_zips = {k: v for k, v in self.release_zips.items() 
+                           if k in self.product_manual_releases}
+        elif category == 'knowledge_base':
+            filtered_zips = {k: v for k, v in self.release_zips.items() 
+                           if k in self.knowledge_base_releases}
+        else:
+            filtered_zips = self.release_zips
+            
+        total_zip_size = sum(zip_info['size'] for zip_info in filtered_zips.values())
         
         return {
-            'release_folders_count': len(self.releases),
-            'release_folders_pdf_count': len(self.all_pdfs),
-            'release_folders_total_size': total_pdf_size,
-            'release_folders_total_size_human': self.format_size(total_pdf_size),
-            'release_zips_count': len(self.release_zips),
+            'product_manual_count': len(self.product_manual_releases),
+            'product_manual_doc_count': len(product_manual_docs),
+            'knowledge_base_count': len(self.knowledge_base_releases),
+            'knowledge_base_doc_count': len(knowledge_base_docs),
+            'release_folders_count': release_count,
+            'release_folders_doc_count': len(filtered_docs),
+            'release_folders_total_size': total_doc_size,
+            'release_folders_total_size_human': self.format_size(total_doc_size),
+            'release_zips_count': len(filtered_zips),
             'release_zips_total_size': total_zip_size,
             'release_zips_total_size_human': self.format_size(total_zip_size),
+            'type_stats': {k: {'count': v['count'], 'size_human': self.format_size(v['size'])} for k, v in type_stats.items()},
             # 保留原有字段以兼容现有代码
-            'total_releases': len(self.releases),
-            'total_pdfs': len(self.all_pdfs),
-            'total_size': total_pdf_size
+            'total_releases': release_count,
+            'total_pdfs': sum(1 for doc in filtered_docs if doc['type'] == 'pdf'),
+            'total_size': total_doc_size
         }
 
 # 初始化文档管理器
@@ -233,11 +358,30 @@ doc_manager = None
 
 @app.route('/')
 def index():
-    """主页 - 显示所有releases和zip文件"""
-    releases = doc_manager.get_all_releases_with_zips()
-    stats = doc_manager.get_stats()
+    """主页 - 知识门户统一页面"""
+    # 获取两个分类的数据
+    pm_releases = doc_manager.get_all_releases_with_zips('product_manual')
+    kb_releases = doc_manager.get_all_releases_with_zips('knowledge_base')
     
-    return render_template('index.html', releases=releases, stats=stats)
+    # 获取两个分类的统计数据
+    pm_stats = doc_manager.get_stats('product_manual')
+    kb_stats = doc_manager.get_stats('knowledge_base')
+    
+    return render_template('portal.html', 
+                         pm_releases=pm_releases, 
+                         kb_releases=kb_releases,
+                         pm_stats=pm_stats,
+                         kb_stats=kb_stats)
+
+@app.route('/knowledge-base')
+def knowledge_base():
+    """知识库页面 - 重定向到主页的知识库选项卡"""
+    return redirect(url_for('index'), code=302)
+
+@app.route('/product-manual')
+def product_manual():
+    """产品手册页面 - 重定向到主页的产品手册选项卡"""
+    return redirect(url_for('index'), code=302)
 
 @app.route('/api/releases')
 def api_releases():
@@ -334,32 +478,38 @@ def api_search():
             'doc': {
                 'name': doc['name'],
                 'relative_path': doc['relative_path'],
-                'size_human': doc['size_human']
+                'size_human': doc['size_human'],
+                'type': doc['type'],
+                'category': doc.get('category', 'product_manual'),
+                'absolute_path': doc.get('absolute_path', '')
             },
             'product': doc['release'],  # 使用release作为product
             'version': doc['release'],  # 使用release作为version
-            'module': doc['relative_in_release']  # 使用相对路径作为module
+            'module': doc['relative_in_release'],  # 使用相对路径作为module
+            'category': doc.get('category', 'product_manual')  # 添加分类信息
         }
         results.append(result)
     
     return jsonify(results)
 
 @app.route('/release/<release>')
-def view_release(release):
+@app.route('/release/<category>/<release>')
+def view_release(release, category='product_manual'):
     """查看release页面"""
-    # 首先检查是否是zip文件
-    if release in doc_manager.release_zips:
+    # 首先检查是否是zip文件（只在product_manual分类中）
+    if category == 'product_manual' and release in doc_manager.release_zips:
         zip_info = doc_manager.release_zips[release]
         return render_template('zip_notice.html', 
                              release=release, 
-                             zip_info=zip_info)
+                             zip_info=zip_info,
+                             category=category)
     
     # 正常的release目录
-    documents = doc_manager.get_release_documents(release)
+    documents = doc_manager.get_release_documents(release, category)
     if not documents:
         return "Release不存在", 404
     
-    return render_template('release.html', release=release, documents=documents)
+    return render_template('release.html', release=release, documents=documents, category=category)
 
 @app.route('/pdf/<path:file_path>')
 def view_pdf(file_path):
@@ -377,9 +527,43 @@ def view_pdf(file_path):
     
     return send_file(str(full_path), mimetype='application/pdf')
 
+@app.route('/mhtml/<path:file_path>')
+def view_mhtml(file_path):
+    """查看MHTML文件"""
+    
+    # 构建完整路径
+    full_path = doc_manager.base_path / file_path
+    
+    if not full_path.exists() or not full_path.is_file():
+        return "文件不存在", 404
+    
+    # 检查文件类型
+    if not str(full_path).lower().endswith(('.mhtml', '.mht')):
+        return "不是MHTML文件", 400
+    
+    # MHTML文件可以直接作为HTML内容返回
+    # 设置正确的MIME类型
+    return send_file(
+        str(full_path),
+        mimetype='multipart/related',
+        as_attachment=False
+    )
+
+@app.route('/archive/<path:file_path>')
+def download_archive(file_path):
+    """下载压缩包文件"""
+    
+    # 构建完整路径
+    full_path = doc_manager.base_path / file_path
+    
+    if not full_path.exists() or not full_path.is_file():
+        return "文件不存在", 404
+    
+    return send_file(str(full_path), as_attachment=True)
+
 @app.route('/download/<path:file_path>')
-def download_pdf(file_path):
-    """下载PDF文件"""
+def download_file(file_path):
+    """下载文件"""
     
     full_path = doc_manager.base_path / file_path
     
@@ -387,6 +571,11 @@ def download_pdf(file_path):
         return "文件不存在", 404
     
     return send_file(str(full_path), as_attachment=True)
+
+@app.route('/test-mhtml')
+def test_mhtml():
+    """测试MHTML功能"""
+    return render_template('test_mhtml.html')
 
 def init_app(base_path):
     """初始化应用和文档管理器"""
@@ -413,7 +602,11 @@ if __name__ == '__main__':
     print(f"服务地址: http://localhost:5000")
     print(f"文档目录: {base_path}")
     print(f"Release数量: {stats['total_releases']}")
-    print(f"PDF文件数量: {stats['total_pdfs']}")
+    print(f"文档数量: {stats['release_folders_doc_count']}")
+    if 'type_stats' in stats:
+        for doc_type, type_info in stats['type_stats'].items():
+            print(f"  - {doc_type.upper()}: {type_info['count']} 个 ({type_info['size_human']})")
+    print(f"ZIP文件数量: {stats['release_zips_count']}")
     print(f"总大小: {doc_manager.format_size(stats['total_size'])}")
     
     # 终极解决方案：重定向stdout并过滤Werkzeug日志

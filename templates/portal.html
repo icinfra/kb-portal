@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}知识Portal{% endblock %}
+
+{% block content %}
+<!-- 页面标题 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="text-center">
+            <h1 class="display-4 mb-3">
+                <i class="bi bi-database me-3"></i>知识Portal
+            </h1>
+            <p class="lead text-muted">产品手册与技术知识库统一门户</p>
+        </div>
+    </div>
+</div>
+
+<!-- 选项卡导航 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <ul class="nav nav-tabs nav-justified" id="portalTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="product-manual-tab" data-bs-toggle="tab" 
+                        data-bs-target="#product-manual" type="button" role="tab" 
+                        aria-controls="product-manual" aria-selected="true">
+                    <i class="bi bi-file-earmark-pdf me-2"></i>
+                    <span class="fw-bold">Product Manual</span>
+                    <br><small class="text-muted">产品手册</small>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="knowledge-base-tab" data-bs-toggle="tab" 
+                        data-bs-target="#knowledge-base" type="button" role="tab" 
+                        aria-controls="knowledge-base" aria-selected="false">
+                    <i class="bi bi-book me-2"></i>
+                    <span class="fw-bold">Knowledge Base</span>
+                    <br><small class="text-muted">知识库</small>
+                </button>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<!-- 选项卡内容 -->
+<div class="tab-content" id="portalTabContent">
+    <!-- Product Manual 选项卡 -->
+    <div class="tab-pane fade show active" id="product-manual" role="tabpanel" aria-labelledby="product-manual-tab">
+        <!-- Product Manual 统计信息 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center stats-card-pm">
+                    <div class="card-body">
+                        <h2 class="text-primary">
+                            <i class="bi bi-folder me-2"></i><span id="pm-release-count">{{ pm_stats.release_folders_count or 0 }}</span>
+                        </h2>
+                        <h5>Release Folders</h5>
+                        <small class="text-muted">产品发布目录</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="text-info">
+                            <i class="bi bi-files me-2"></i><span id="pm-doc-count">{{ pm_stats.release_folders_doc_count or 0 }}</span>
+                        </h2>
+                        <h5>总文档数</h5>
+                        <small class="text-muted">{{ pm_stats.release_folders_total_size_human or '0 B' }}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="text-danger">
+                            <i class="bi bi-file-pdf me-2"></i><span id="pm-pdf-count">{{ pm_stats.type_stats.pdf.count if pm_stats.type_stats.pdf else 0 }}</span>
+                        </h2>
+                        <h5>PDF 文档</h5>
+                        <small class="text-muted">{{ pm_stats.type_stats.pdf.size_human if pm_stats.type_stats.pdf else '0 B' }}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="text-warning">
+                            <i class="bi bi-file-code me-2"></i><span id="pm-mhtml-count">{{ pm_stats.type_stats.mhtml.count if pm_stats.type_stats.mhtml else 0 }}</span>
+                        </h2>
+                        <h5>MHTML 文档</h5>
+                        <small class="text-muted">{{ pm_stats.type_stats.mhtml.size_human if pm_stats.type_stats.mhtml else '0 B' }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Product Manual Releases 列表 -->
+        <div class="row" id="pm-releases">
+            {% for release in pm_releases %}
+            <div class="col-lg-4 col-md-6 mb-4">
+                {% if release.is_zip %}
+                <!-- ZIP文件卡片 -->
+                <div class="card h-100 release-card zip-card" onclick="location.href='/release/product_manual/{{ release.name }}';">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-file-earmark-zip text-warning me-2"></i>
+                            {{ release.name }}
+                            <span class="badge bg-warning text-dark ms-2">ZIP</span>
+                        </h5>
+                        <p class="card-text text-muted">
+                            压缩包文件 ({{ release.size_human }})
+                            <br>
+                            <small class="text-warning">需要联系管理员解压缩才能浏览</small>
+                        </p>
+                        <div class="text-muted">
+                            <i class="bi bi-calendar3 me-1"></i>{{ release.date_human }}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <!-- 普通Release文件夹卡片 -->
+                <div class="card h-100 release-card" onclick="location.href='/release/product_manual/{{ release.name }}';">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-folder text-primary me-2"></i>
+                            {{ release.name }}
+                            <span class="badge bg-primary ms-2">{{ release.doc_count }}</span>
+                        </h5>
+                        <p class="card-text text-muted">
+                            包含 {{ release.doc_count }} 个文档
+                            <br>
+                            点击查看此版本的所有文档
+                        </p>
+                        <div class="text-muted">
+                            <i class="bi bi-calendar3 me-1"></i>{{ release.date_human }}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Knowledge Base 选项卡 -->
+    <div class="tab-pane fade" id="knowledge-base" role="tabpanel" aria-labelledby="knowledge-base-tab">
+        <!-- Knowledge Base 统计信息 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center stats-card-kb">
+                    <div class="card-body">
+                        <h2 class="text-success">
+                            <i class="bi bi-folder me-2"></i><span id="kb-release-count">{{ kb_stats.release_folders_count or 0 }}</span>
+                        </h2>
+                        <h5>KB Folders</h5>
+                        <small class="text-muted">知识库目录</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="text-info">
+                            <i class="bi bi-files me-2"></i><span id="kb-doc-count">{{ kb_stats.release_folders_doc_count or 0 }}</span>
+                        </h2>
+                        <h5>总文档数</h5>
+                        <small class="text-muted">{{ kb_stats.release_folders_total_size_human or '0 B' }}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="text-danger">
+                            <i class="bi bi-file-pdf me-2"></i><span id="kb-pdf-count">{{ kb_stats.type_stats.pdf.count if kb_stats.type_stats.pdf else 0 }}</span>
+                        </h2>
+                        <h5>PDF 文档</h5>
+                        <small class="text-muted">{{ kb_stats.type_stats.pdf.size_human if kb_stats.type_stats.pdf else '0 B' }}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h2 class="text-warning">
+                            <i class="bi bi-file-code me-2"></i><span id="kb-mhtml-count">{{ kb_stats.type_stats.mhtml.count if kb_stats.type_stats.mhtml else 0 }}</span>
+                        </h2>
+                        <h5>MHTML 文档</h5>
+                        <small class="text-muted">{{ kb_stats.type_stats.mhtml.size_human if kb_stats.type_stats.mhtml else '0 B' }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Knowledge Base Releases 列表 -->
+        <div class="row" id="kb-releases">
+            {% for release in kb_releases %}
+            <div class="col-lg-4 col-md-6 mb-4">
+                {% if release.is_zip %}
+                <!-- ZIP文件卡片 -->
+                <div class="card h-100 release-card zip-card" onclick="location.href='/release/knowledge_base/{{ release.name }}';">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-file-earmark-zip text-warning me-2"></i>
+                            {{ release.name }}
+                            <span class="badge bg-warning text-dark ms-2">ZIP</span>
+                        </h5>
+                        <p class="card-text text-muted">
+                            压缩包文件 ({{ release.size_human }})
+                            <br>
+                            <small class="text-warning">需要联系管理员解压缩才能浏览</small>
+                        </p>
+                        <div class="text-muted">
+                            <i class="bi bi-calendar3 me-1"></i>{{ release.date_human }}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <!-- 普通Release文件夹卡片 -->
+                <div class="card h-100 release-card" onclick="location.href='/release/knowledge_base/{{ release.name }}';">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-folder text-success me-2"></i>
+                            {{ release.name }}
+                            <span class="badge bg-success ms-2">{{ release.doc_count }}</span>
+                        </h5>
+                        <p class="card-text text-muted">
+                            包含 {{ release.doc_count }} 个文档
+                            <br>
+                            点击查看此版本的所有文档
+                        </p>
+                        <div class="text-muted">
+                            <i class="bi bi-calendar3 me-1"></i>{{ release.date_human }}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<style>
+/* 选项卡样式增强 */
+.nav-tabs .nav-link {
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 15px 25px;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.nav-tabs .nav-link:hover {
+    border-color: transparent;
+    border-bottom-color: #0d6efd;
+    color: #0d6efd;
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.nav-tabs .nav-link.active {
+    color: #0d6efd;
+    background-color: rgba(13, 110, 253, 0.1);
+    border-color: transparent;
+    border-bottom-color: #0d6efd;
+    font-weight: 600;
+}
+
+/* 统计卡片样式 */
+.stats-card-pm {
+    border-left: 4px solid #0d6efd;
+}
+
+.stats-card-kb {
+    border-left: 4px solid #198754;
+}
+
+/* Release卡片样式 */
+.release-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid #dee2e6;
+}
+
+.release-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    border-color: #0d6efd;
+}
+
+.zip-card:hover {
+    border-color: #ffc107;
+}
+
+/* 页面标题样式 */
+.display-4 {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+</style>
+
+<script>
+// 处理选项卡切换和URL片段
+document.addEventListener('DOMContentLoaded', function() {
+    // 检查URL片段，自动切换到对应选项卡
+    const hash = window.location.hash;
+    if (hash === '#knowledge-base') {
+        const kbTab = new bootstrap.Tab(document.getElementById('knowledge-base-tab'));
+        kbTab.show();
+    } else if (hash === '#product-manual') {
+        const pmTab = new bootstrap.Tab(document.getElementById('product-manual-tab'));
+        pmTab.show();
+    }
+    
+    // 当选项卡切换时更新URL
+    const tabs = document.querySelectorAll('[data-bs-toggle="tab"]');
+    tabs.forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            const targetId = e.target.getAttribute('data-bs-target');
+            if (targetId === '#knowledge-base') {
+                history.replaceState(null, null, '#knowledge-base');
+            } else if (targetId === '#product-manual') {
+                history.replaceState(null, null, '#product-manual');
+            } else {
+                history.replaceState(null, null, location.pathname);
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

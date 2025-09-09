@@ -5,7 +5,11 @@
 {% block breadcrumb %}
 <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">首页</a></li>
+        {% if category == 'knowledge_base' %}
+            <li class="breadcrumb-item"><a href="{{ url_for('knowledge_base') }}">知识库</a></li>
+        {% else %}
+            <li class="breadcrumb-item"><a href="{{ url_for('index') }}">产品手册</a></li>
+        {% endif %}
         <li class="breadcrumb-item active">{{ release }}</li>
     </ol>
 </nav>
@@ -17,31 +21,70 @@
     <span class="badge bg-secondary">{{ documents|length }} 个文档</span>
 </div>
 
-<div class="row">
+<!-- 文件类型筛选标签 -->
+<div class="mb-3">
+    <div class="btn-group" role="group">
+        <button type="button" class="btn btn-outline-primary active" onclick="filterFiles('all')">
+            全部
+        </button>
+        <button type="button" class="btn btn-outline-primary" onclick="filterFiles('pdf')">
+            <i class="bi bi-file-earmark-pdf"></i> PDF
+        </button>
+        <button type="button" class="btn btn-outline-primary" onclick="filterFiles('mhtml')">
+            <i class="bi bi-file-earmark-code"></i> MHTML
+        </button>
+        <button type="button" class="btn btn-outline-primary" onclick="filterFiles('archive')">
+            <i class="bi bi-file-earmark-zip"></i> 压缩包
+        </button>
+    </div>
+</div>
+
+<div class="row" id="filesList">
     {% for doc in documents %}
-    <div class="col-12 mb-3">
+    <div class="col-12 mb-3 file-item" data-file-type="{{ doc.type }}">
         <div class="card document-item">
             <div class="card-body">
                 <div class="row align-items-center">
                     <div class="col-md-8">
                         <h6 class="card-title mb-1">
-                            <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                            {% if doc.type == 'pdf' %}
+                                <i class="bi bi-file-earmark-pdf text-danger me-2"></i>
+                            {% elif doc.type == 'mhtml' %}
+                                <i class="bi bi-file-earmark-code text-info me-2"></i>
+                            {% elif doc.type == 'archive' %}
+                                <i class="bi bi-file-earmark-zip text-warning me-2"></i>
+                            {% else %}
+                                <i class="bi bi-file-earmark me-2"></i>
+                            {% endif %}
                             {{ doc.name }}
                         </h6>
                         <p class="path-text mb-0">{{ doc.relative_in_release }}</p>
+                        <small class="text-muted">类型: {{ doc.type|upper }}{% if doc.modified %} | 修改时间: {{ doc.modified }}{% endif %}</small>
                     </div>
                     <div class="col-md-2 text-center">
                         <span class="file-size">{{ doc.size_human }}</span>
                     </div>
                     <div class="col-md-2 text-end">
                         <div class="btn-group" role="group">
-                            <a href="{{ url_for('view_pdf', file_path=doc.relative_path) }}" 
-                               class="btn btn-outline-primary btn-sm" target="_blank">
-                                <i class="bi bi-eye"></i> 查看
-                            </a>
-                            <a href="{{ url_for('download_pdf', file_path=doc.relative_path) }}" 
+                            {% if doc.type == 'pdf' %}
+                                <a href="{{ url_for('view_pdf', file_path=doc.relative_path) }}" 
+                                   class="btn btn-outline-primary btn-sm" target="_blank">
+                                    <i class="bi bi-eye"></i> 查看PDF
+                                </a>
+                            {% elif doc.type == 'mhtml' %}
+                                <button class="btn btn-outline-info btn-sm" data-file-path="{{ doc.absolute_path }}" onclick="openMHTMLFile(this.getAttribute('data-file-path'))">
+                                    <i class="bi bi-eye"></i> 查看MHTML
+                                </button>
+                            {% elif doc.type == 'archive' %}
+                                <a href="{{ url_for('download_archive', file_path=doc.relative_path) }}" 
+                                   class="btn btn-outline-warning btn-sm">
+                                    <i class="bi bi-download"></i> 下载
+                                </a>
+                            {% endif %}
+                            
+                            <a href="{{ url_for('download_file', file_path=doc.relative_path) }}" 
                                class="btn btn-outline-secondary btn-sm">
-                                <i class="bi bi-download"></i> 下载
+                                <i class="bi bi-download"></i> 下载原文件
                             </a>
                         </div>
                     </div>
@@ -84,5 +127,114 @@
     font-size: 0.9em;
     font-weight: 500;
 }
+
+/* 文件类型筛选 */
+.btn-group .btn {
+    transition: all 0.2s ease;
+}
+
+.btn-group .btn.active {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: white;
+}
 </style>
+
+<script>
+function filterFiles(type) {
+    const files = document.querySelectorAll('.file-item');
+    const buttons = document.querySelectorAll('.btn-group button');
+    
+    // 更新按钮状态
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // 找到并激活当前按钮
+    const currentBtn = Array.from(buttons).find(btn => 
+        btn.onclick && btn.onclick.toString().includes(`'${type}'`)
+    );
+    if (currentBtn) {
+        currentBtn.classList.add('active');
+    }
+    
+    // 显示/隐藏文件
+    files.forEach(file => {
+        if (type === 'all' || file.dataset.fileType === type) {
+            file.style.display = 'block';
+        } else {
+            file.style.display = 'none';
+        }
+    });
+}
+
+function openMHTMLFile(absolutePath) {
+    console.log('openMHTMLFile called with path:', absolutePath);
+    
+    if (!absolutePath) {
+        console.error('No file path provided');
+        alert('错误：未提供文件路径');
+        return;
+    }
+    
+    // 直接构造file://协议URL
+    let fileUrl;
+    if (absolutePath.match(/^[A-Z]:/)) {
+        // Windows路径：C:\path\to\file.mhtml -> file:///C:/path/to/file.mhtml
+        fileUrl = 'file:///' + absolutePath.replace(/\\/g, '/');
+    } else {
+        // Unix/Linux路径：/path/to/file.mhtml -> file:///path/to/file.mhtml
+        fileUrl = 'file://' + absolutePath;
+    }
+    
+    console.log('Opening MHTML file with URL:', fileUrl);
+    
+    try {
+        // 直接在新标签页中打开文件
+        const newTab = window.open(fileUrl, '_blank');
+        
+        // 检查是否成功打开
+        if (!newTab || newTab.closed || typeof newTab.closed == 'undefined') {
+            console.warn('Window.open was blocked or failed');
+            
+            // 提供备选方案
+            const message = `浏览器阻止了文件的直接打开。\n\n请将以下地址复制到浏览器地址栏：\n${fileUrl}\n\n是否复制到剪贴板？`;
+            
+            if (confirm(message)) {
+                // 复制到剪贴板
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(fileUrl).then(() => {
+                        alert('文件URL已复制到剪贴板！');
+                        console.log('File URL copied to clipboard');
+                    }).catch(err => {
+                        console.error('Failed to copy to clipboard:', err);
+                        // 备选复制方法
+                        const textArea = document.createElement('textarea');
+                        textArea.value = fileUrl;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        alert('文件URL已复制到剪贴板！');
+                    });
+                } else {
+                    // 备选复制方法
+                    const textArea = document.createElement('textarea');
+                    textArea.value = fileUrl;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('文件URL已复制到剪贴板！');
+                }
+            }
+        } else {
+            console.log('Successfully opened MHTML file in new tab');
+        }
+    } catch (error) {
+        console.error('Error opening MHTML file:', error);
+        alert('打开文件时发生错误：' + error.message);
+    }
+}
+</script>
 {% endblock %}

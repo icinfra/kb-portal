@@ -144,8 +144,8 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('index') }}">
-                <i class="bi bi-file-earmark-pdf"></i>
-                ICINFRA EDA资料门户
+                <i class="bi bi-database"></i>
+                知识Portal
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -174,44 +174,9 @@
         </div>
     </nav>
 
-    <!-- Tab导航 -->
-    <div class="container mt-3">
-        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="product-manual-tab" data-bs-toggle="tab" data-bs-target="#product-manual" type="button" role="tab">
-                    <i class="bi bi-file-earmark-pdf me-2"></i>Product Manual
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="knowledge-base-tab" data-bs-toggle="tab" data-bs-target="#knowledge-base" type="button" role="tab">
-                    <i class="bi bi-book me-2"></i>Knowledge Base
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="api-docs-tab" data-bs-toggle="tab" data-bs-target="#api-docs" type="button" role="tab">
-                    <i class="bi bi-code-square me-2"></i>API Documentation
-                </button>
-            </li>
-        </ul>
-    </div>
-
     <main class="container mt-3">
-        <div class="tab-content" id="mainTabsContent">
-            <div class="tab-pane fade show active" id="product-manual" role="tabpanel">
-                {% block breadcrumb %}{% endblock %}
-                {% block content %}{% endblock %}
-            </div>
-            <div class="tab-pane fade" id="knowledge-base" role="tabpanel">
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle me-2"></i>知识库功能正在开发中...
-                </div>
-            </div>
-            <div class="tab-pane fade" id="api-docs" role="tabpanel">
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle me-2"></i>API文档功能正在开发中...
-                </div>
-            </div>
-        </div>
+        {% block breadcrumb %}{% endblock %}
+        {% block content %}{% endblock %}
     </main>
 
     <!-- 用户名设置模态框 -->
@@ -640,13 +605,67 @@
                 results.slice(0, 10).forEach(result => {
                     const item = document.createElement('div');
                     item.className = 'search-result-item';
+                    
+                    // 根据文件类型选择图标和颜色
+                    let icon = 'bi-file-earmark';
+                    let iconColor = '';
+                    let fileType = result.doc.type || 'unknown';
+                    
+                    if (fileType === 'pdf') {
+                        icon = 'bi-file-earmark-pdf';
+                        iconColor = 'text-danger';
+                    } else if (fileType === 'mhtml') {
+                        icon = 'bi-file-earmark-code';
+                        iconColor = 'text-info';
+                    } else if (fileType === 'archive') {
+                        icon = 'bi-file-earmark-zip';
+                        iconColor = 'text-warning';
+                    }
+                    
+                    // 确定分类标识
+                    const category = result.category || 'product_manual';
+                    const categoryBadge = category === 'knowledge_base' 
+                        ? '<span class="badge bg-success me-1">KB</span>' 
+                        : '<span class="badge bg-primary me-1">PM</span>';
+                    
                     item.innerHTML = `
-                        <div class="fw-bold">${result.doc.name}</div>
+                        <div class="fw-bold">
+                            ${categoryBadge}<i class="bi ${icon} ${iconColor} me-1"></i> ${result.doc.name}
+                        </div>
                         <div class="module-path">${result.product} / ${result.version} / ${result.module}</div>
-                        <div class="file-size">${result.doc.size_human}</div>
+                        <div class="file-size">${result.doc.size_human} - ${fileType.toUpperCase()}</div>
                     `;
+                    
                     item.addEventListener('click', () => {
-                        window.open(`/pdf/${result.doc.relative_path}`, '_blank');
+                        const username = localStorage.getItem(STORAGE_KEY) || currentUsername;
+                        // 根据文件类型打开不同的查看器
+                        if (fileType === 'pdf') {
+                            window.open(`/pdf/${result.doc.relative_path}?user=${username}`, '_blank');
+                        } else if (fileType === 'mhtml') {
+                            // 使用绝对路径直接构造file://协议URL
+                            const absolutePath = result.doc.absolute_path;
+                            if (absolutePath) {
+                                let fileUrl;
+                                if (absolutePath.match(/^[A-Z]:/)) {
+                                    // Windows路径
+                                    fileUrl = 'file:///' + absolutePath.replace(/\\/g, '/');
+                                } else {
+                                    // Unix/Linux路径
+                                    fileUrl = 'file://' + absolutePath;
+                                }
+                                console.log('Opening MHTML file from search:', fileUrl);
+                                const newTab = window.open(fileUrl, '_blank');
+                                if (!newTab) {
+                                    alert(`无法打开MHTML文件。\n\n请将以下地址复制到浏览器地址栏：\n${fileUrl}`);
+                                }
+                            } else {
+                                alert('文件路径信息缺失');
+                            }
+                        } else if (fileType === 'archive') {
+                            window.location.href = `/archive/${result.doc.relative_path}?user=${username}`;
+                        } else {
+                            window.location.href = `/download/${result.doc.relative_path}?user=${username}`;
+                        }
                     });
                     searchResults.appendChild(item);
                 });
@@ -687,7 +706,7 @@
                 footerUser.textContent = `当前用户: ${username}`;
             }
         }
-
+        
         // 确保所有AJAX请求都包含用户信息
         const originalFetch = window.fetch;
         window.fetch = function(...args) {

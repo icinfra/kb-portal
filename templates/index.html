@@ -5,23 +5,74 @@
 {% block content %}
 <!-- 统计信息 -->
 <div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-center stats-card-pm">
+            <div class="card-body">
+                <h2 class="text-primary">
+                    <i class="bi bi-file-earmark-pdf me-2"></i>{{ stats.product_manual_count or 0 }}
+                </h2>
+                <h5>Product Manual</h5>
+                <small class="text-muted">产品手册目录</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center stats-card-kb">
+            <div class="card-body">
+                <h2 class="text-success">
+                    <i class="bi bi-book me-2"></i>{{ stats.knowledge_base_count or 0 }}
+                </h2>
+                <h5>Knowledge Base</h5>
+                <small class="text-muted">知识库目录</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center stats-card-arc">
+            <div class="card-body">
+                <h2 class="text-warning">
+                    <i class="bi bi-archive me-2"></i>{{ stats.type_stats.archive.count if stats.type_stats.archive else 0 }}
+                </h2>
+                <h5>Archive Files</h5>
+                <small class="text-muted">压缩包文件</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 详细统计信息 -->
+<div class="row mb-4">
     <div class="col-md-12">
-        <div class="card stats-card">
+        <div class="card">
             <div class="card-body">
                 <div class="row text-center">
-                    <div class="col-md-6">
-                        <h3><i class="bi bi-folder"></i> {{ stats.release_folders_count }}</h3>
-                        <p>Release Folders</p>
-                        <small class="text-light">
-                            {{ stats.release_folders_pdf_count }} PDFs | {{ stats.release_folders_total_size_human }}
-                        </small>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <h4 class="text-danger">{{ stats.type_stats.pdf.count if stats.type_stats.pdf else 0 }}</h4>
+                            <p class="mb-0">PDF 文档</p>
+                            <small class="text-muted">{{ stats.type_stats.pdf.size_human if stats.type_stats.pdf else '0 B' }}</small>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <h3><i class="bi bi-file-earmark-zip"></i> {{ stats.release_zips_count }}</h3>
-                        <p>Release ZIPs</p>
-                        <small class="text-light">
-                            {{ stats.release_zips_total_size_human }}
-                        </small>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <h4 class="text-info">{{ stats.type_stats.mhtml.count if stats.type_stats.mhtml else 0 }}</h4>
+                            <p class="mb-0">MHTML 文档</p>
+                            <small class="text-muted">{{ stats.type_stats.mhtml.size_human if stats.type_stats.mhtml else '0 B' }}</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <h4 class="text-warning">{{ stats.type_stats.archive.count if stats.type_stats.archive else 0 }}</h4>
+                            <p class="mb-0">压缩包</p>
+                            <small class="text-muted">{{ stats.type_stats.archive.size_human if stats.type_stats.archive else '0 B' }}</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <h4 class="text-secondary">{{ stats.release_folders_doc_count or 0 }}</h4>
+                            <p class="mb-0">总文档数</p>
+                            <small class="text-muted">{{ stats.release_folders_total_size_human or '0 B' }}</small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -99,9 +150,37 @@
     .zip-card:hover {
         border-left-color: #e0a800;
     }
-    .stats-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+    
+    /* 统计卡片样式 */
+    .stats-card-pm {
+        border-left: 4px solid #0d6efd;
+        transition: transform 0.2s;
+    }
+    .stats-card-pm:hover {
+        transform: translateY(-2px);
+    }
+    .stats-card-kb {
+        border-left: 4px solid #198754;
+        transition: transform 0.2s;
+    }
+    .stats-card-kb:hover {
+        transform: translateY(-2px);
+    }
+    .stats-card-arc {
+        border-left: 4px solid #ffc107;
+        transition: transform 0.2s;
+    }
+    .stats-card-arc:hover {
+        transform: translateY(-2px);
+    }
+    
+    .stat-item {
+        padding: 10px;
+        border-radius: 8px;
+        transition: background-color 0.2s;
+    }
+    .stat-item:hover {
+        background-color: #f8f9fa;
     }
 </style>
 {% endblock %}
