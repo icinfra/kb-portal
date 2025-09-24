@@ -86,7 +86,7 @@
     <div class="col-lg-4 col-md-6 mb-4">
         {% if release.is_zip %}
         <!-- ZIP文件卡片 -->
-        <div class="card h-100 release-card zip-card" onclick="location.href='/release/{{ release.name }}';">
+        <div class="card h-100 release-card zip-card" data-release-name="{{ release.name|e }}" onclick="navigateToRelease('product_manual', this.getAttribute('data-release-name'));">
             <div class="card-body">
                 <h5 class="card-title">
                     <i class="bi bi-file-earmark-zip text-warning me-2"></i>
@@ -107,7 +107,7 @@
         </div>
         {% else %}
         <!-- 正常目录卡片 -->
-        <div class="card h-100 release-card" onclick="location.href='/release/{{ release.name }}';">
+        <div class="card h-100 release-card" data-release-name="{{ release.name|e }}" onclick="navigateToRelease('product_manual', this.getAttribute('data-release-name'));">
             <div class="card-body">
                 <h5 class="card-title">
                     <i class="bi bi-folder text-primary me-2"></i>
@@ -183,4 +183,21 @@
         background-color: #f8f9fa;
     }
 </style>
+
+<script>
+// 安全的导航函数，处理包含特殊字符的release名称
+function navigateToRelease(category, releaseName) {
+    console.log('navigateToRelease called:', category, releaseName);
+    try {
+        // URL编码release名称以处理特殊字符
+        const encodedReleaseName = encodeURIComponent(releaseName);
+        const url = '/release/' + category + '/' + encodedReleaseName;
+        console.log('Navigating to:', url);
+        window.location.href = url;
+    } catch (error) {
+        console.error('Error navigating to release:', error);
+        alert('导航错误: ' + error.message);
+    }
+}
+</script>
 {% endblock %}

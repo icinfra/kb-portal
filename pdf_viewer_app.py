@@ -496,20 +496,25 @@ def api_search():
 @app.route('/release/<category>/<release>')
 def view_release(release, category='product_manual'):
     """查看release页面"""
+    from urllib.parse import unquote
+    
+    # URL解码release名称以处理特殊字符
+    decoded_release = unquote(release)
+    
     # 首先检查是否是zip文件（只在product_manual分类中）
-    if category == 'product_manual' and release in doc_manager.release_zips:
-        zip_info = doc_manager.release_zips[release]
+    if category == 'product_manual' and decoded_release in doc_manager.release_zips:
+        zip_info = doc_manager.release_zips[decoded_release]
         return render_template('zip_notice.html', 
-                             release=release, 
+                             release=decoded_release, 
                              zip_info=zip_info,
                              category=category)
     
     # 正常的release目录
-    documents = doc_manager.get_release_documents(release, category)
+    documents = doc_manager.get_release_documents(decoded_release, category)
     if not documents:
         return "Release不存在", 404
     
-    return render_template('release.html', release=release, documents=documents, category=category)
+    return render_template('release.html', release=decoded_release, documents=documents, category=category)
 
 @app.route('/pdf/<path:file_path>')
 def view_pdf(file_path):
